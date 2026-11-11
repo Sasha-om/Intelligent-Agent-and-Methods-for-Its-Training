@@ -1,0 +1,22 @@
+# === ПРАВИЛО ПРОЄКТУ ===
+# Усі Markdown-файли (AGENTS.md, CLAUDE.md, Insight.md, Handoff.md, docs/*.md,
+# SKILL.md, файли агентів тощо) НЕ потрапляють у git.
+# Єдиний виняток — README.md у корені репозиторію.
+*.md
+!/README.md
+
+# Харнес Claude Code: агенти, скіли, налаштування (теж лише локально)
+.claude/
+CLAUDE.local.md
+# Тимчасова папка з агентами/скілами; після перейменування на .claude цей рядок можна видалити
+_claude_pending/
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Редактори
+.vscode/
+.idea/

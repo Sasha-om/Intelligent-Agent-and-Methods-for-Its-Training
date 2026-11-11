@@ -1,0 +1,767 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Тренажер Q-навчання</title>
+<style>
+  :root{
+    --bg:#12131a; --panel:#1a1c25; --panel-2:#14151c; --border:#2a2d3a;
+    --text:#e8e9f0; --text-dim:#9a9db0; --text-faint:#6b6e80;
+    --accent:#f0a868; --accent-ink:#241a0e;
+    --agent:#4fd1c5; --positive:#8fd19e; --negative:#e18a8a;
+    color-scheme: dark;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family: ui-sans-serif, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    padding-inline: 20px; padding-block: 20px;
+  }
+  .mono{ font-family: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, "Liberation Mono", monospace; font-variant-numeric: tabular-nums; }
+  h1{ font-size: 19px; font-weight: 700; margin: 0; letter-spacing: .1px; }
+  .sub{ font-size: 12.5px; color: var(--text-dim); margin-top: 4px; }
+  .wrap{ max-width: 1280px; margin: 0 auto; display:flex; flex-direction:column; gap:18px; }
+  .head{ display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+  .badge{ display:flex; align-items:center; gap:8px; padding:7px 14px; border-radius:999px; background:var(--panel); border:1px solid var(--border); font-size:12.5px; }
+  .main{ display:flex; gap:18px; align-items:flex-start; flex-wrap:wrap; }
+  .panel{ background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:18px 20px; }
+  .panel-title{ font-size:12px; font-weight:700; color:var(--text-dim); text-transform:uppercase; letter-spacing:.07em; margin-bottom:12px; }
+  .graph-col{ flex: 1 1 500px; min-width: 320px; display:flex; flex-direction:column; gap:10px; }
+  .side-col{ flex: 0 1 402px; min-width: 300px; display:flex; flex-direction:column; gap:16px; }
+  svg{ width:100%; height:auto; display:block; }
+  .free-cell{ fill:var(--panel-2); stroke:var(--border); stroke-width:1; }
+  .terminal-cell{ fill:none; stroke:var(--accent); stroke-width:2.5; }
+  .value-fill{ fill:var(--accent); transition: fill-opacity .3s; }
+  .obstacle-cell{ fill:#1b1d26; stroke:var(--border); stroke-width:1; }
+  .hatch{ stroke:#3a3e4a; stroke-width:1.4; }
+  .cell-val{ font-family: ui-monospace, Consolas, monospace; font-size:9px; fill:var(--text-dim); transition: opacity .3s; }
+  .rough-tag{ font-size:9px; fill:var(--text-faint); font-weight:700; }
+  .cell-tag{ font-size:8.5px; font-weight:700; fill:var(--text-faint); letter-spacing:.4px; }
+  .path-line{ fill:none; stroke:var(--accent); stroke-width:2.5; stroke-linecap:round; stroke-linejoin:round; opacity:.85; }
+  .legend{ display:flex; flex-wrap:wrap; gap:16px 22px; font-size:11.5px; color:var(--text-dim); padding-top:10px; border-top:1px solid #22242e; }
+  .legend .dot{ display:inline-block; width:18px; height:3px; border-radius:2px; margin-right:6px; vertical-align:middle; }
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:14px 18px; }
+  .slider-row{ display:flex; flex-direction:column; gap:6px; }
+  .slider-row .top{ display:flex; justify-content:space-between; font-size:12px; color:var(--text-dim); }
+  input[type=range]{ width:100%; accent-color:var(--accent); }
+  .field-row{ display:flex; align-items:center; justify-content:space-between; padding-top:2px; }
+  .field-row input[type=text]{ width:84px; text-align:right; background:var(--panel-2); border:1px solid var(--border); border-radius:7px; color:var(--text); font-size:12.5px; padding:6px 8px; }
+  .btns{ display:flex; gap:8px; padding-top:2px; }
+  button{ flex:1; padding:10px 0; border-radius:9px; font-size:13px; font-weight:700; cursor:pointer; font-family:inherit; border:1px solid var(--border); background:transparent; color:var(--text); }
+  button:focus-visible{ outline:2px solid var(--agent); outline-offset:2px; }
+  button.primary{ border-color:var(--accent); background:var(--accent); color:var(--accent-ink); }
+  button:disabled{ opacity:.45; cursor:not-allowed; }
+  .code-box{ background:var(--panel-2); border:1px solid var(--border); border-radius:10px; padding:12px 14px; font-size:12px; line-height:1.7; color:var(--text-dim); }
+  .code-box b{ color:var(--text); }
+  .delta{ color:var(--accent); font-weight:700; }
+  .matrix-row{ display:flex; align-items:center; justify-content:space-between; padding:6px 2px; border-bottom:1px solid #22242e; font-size:12px; gap:8px; }
+  .matrix-row:last-child{ border-bottom:none; }
+  .matrix-key{ color:var(--text-dim); white-space:nowrap; }
+  .matrix-key.active{ color:var(--accent); font-weight:700; }
+  .bar-track{ width:56px; height:6px; background:#22242e; border-radius:3px; overflow:hidden; display:inline-block; flex-shrink:0; }
+  .bar-fill{ display:block; height:100%; background:var(--accent); }
+  .matrix-val{ width:42px; text-align:right; color:var(--accent); font-weight:700; flex-shrink:0; }
+  .empty-note{ font-size:12px; color:var(--text-faint); padding:8px 2px; }
+  .stat-tiles{ display:flex; gap:12px; }
+  .tile{ flex:1; background:var(--panel-2); border:1px solid var(--border); border-radius:10px; padding:10px 12px; }
+  .tile .k{ font-size:11px; color:var(--text-faint); }
+  .tile .v{ font-size:16px; font-weight:700; margin-top:2px; }
+  .progress-track{ width:100%; height:7px; background:#22242e; border-radius:4px; overflow:hidden; }
+  .progress-fill{ height:100%; background:var(--accent); transition:width .3s; }
+  .status-pill{ display:inline-flex; align-items:center; gap:8px; padding:8px 14px; border-radius:999px; width:fit-content; font-size:12.5px; font-weight:600; }
+  .status-pill.running{ background:#1c2a1b; border:1px solid #375c36; color:#bfe8c4; }
+  .status-pill.paused{ background:#242631; border:1px solid #3a3e4d; color:#c7c9d6; }
+  .status-pill.done{ background:#241c10; border:1px solid #6b4c26; color:#f0c896; }
+  .status-dot{ width:8px; height:8px; border-radius:50%; background:currentColor; }
+  .foot{ font-size:11.5px; color:var(--text-faint); padding-top:4px; }
+  .qhead{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  .qactions{ display:flex; gap:8px; flex-wrap:wrap; }
+  .qactions button{ flex:0 0 auto; padding:8px 14px; font-size:12px; font-weight:600; }
+  .qnote{ font-size:11.5px; color:var(--text-faint); margin-top:8px; }
+  .qwrap{ margin-top:12px; max-height:440px; overflow:auto; border:1px solid var(--border); border-radius:10px; }
+  .qtable{ width:100%; border-collapse:collapse; font-size:12px; }
+  .qtable th{ position:sticky; top:0; background:var(--panel-2); color:var(--text-dim); font-weight:700; text-align:right; padding:8px 10px; border-bottom:1px solid var(--border); white-space:nowrap; }
+  .qtable th:first-child, .qtable th:nth-child(2), .qtable td:first-child, .qtable td:nth-child(2){ text-align:left; }
+  .qtable td{ padding:5px 10px; border-bottom:1px solid #22242e; text-align:right; color:var(--text); white-space:nowrap; }
+  .qtable td.na{ color:var(--text-faint); }
+  .qtable td.best{ color:var(--accent); font-weight:700; }
+  .qtable td.upd{ outline:2px solid var(--agent); outline-offset:-2px; }
+  .qtable tr.cur td:first-child{ color:var(--agent); font-weight:700; }
+  .qtable tr.cur td:first-child::before{ content:'● '; }
+  .qtable td.kind{ color:var(--text-dim); }
+  #gridSvg{ max-height:80vh; }
+  #gridSvg.big .free-cell, #gridSvg.big .obstacle-cell, #gridSvg.big .terminal-cell,
+  #gridSvg.big .path-line, #gridSvg.big .hover-cell, #gridSvg.big circle{ vector-effect:non-scaling-stroke; }
+  #gridSvg.big .free-cell{ stroke-width:.5; }
+  #gridSvg.big .obstacle-cell{ fill:#3a3e4c; stroke:none; }
+  #gridSvg.big .rough-cell{ fill:#4a3a22; }
+  #gridSvg.big .value-fill, #gridSvg.big .cell-val{ transition:none; }
+  #gridSvg{ cursor:crosshair; touch-action:none; user-select:none; -webkit-user-select:none; }
+  .hover-cell{ fill:none; stroke:var(--agent); stroke-width:2; pointer-events:none; }
+  .dims{ display:flex; gap:14px; margin-bottom:12px; }
+  .dims label{ flex:1; display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:12px; color:var(--text-dim); }
+  .dims input{ width:62px; text-align:right; background:var(--panel-2); border:1px solid var(--border); border-radius:7px; color:var(--text); font-size:12.5px; padding:6px 8px; }
+  .tools{ display:grid; grid-template-columns:repeat(5,1fr); gap:6px; margin-bottom:10px; }
+  .tools button{ padding:8px 0; font-size:11.5px; font-weight:600; }
+  .tools button.active{ border-color:var(--agent); color:var(--agent); background:#16302e; }
+  .btns.small button{ padding:8px 0; font-size:12px; font-weight:600; }
+  .hint{ font-size:11.5px; color:var(--text-faint); margin-top:10px; line-height:1.5; }
+  .warn{ font-size:12px; color:var(--negative); background:#2a1a1c; border:1px solid #5c3436; border-radius:8px; padding:8px 10px; margin-top:10px; }
+  @media (max-width: 900px){
+    .main{ flex-direction:column; }
+    .side-col{ flex-basis:auto; width:100%; }
+  }
+</style>
+
+<div class="wrap">
+
+  <div class="head">
+    <div>
+      <h1>Q-навчання у вільному середовищі з перешкодами</h1>
+      <div class="sub">Табличне Q-навчання методом проб і помилок · шлях не заданий заздалегідь — агент прокладає його сам</div>
+    </div>
+    <div class="badge mono" id="episodeBadge">Епізод <b id="epNow">0</b>&nbsp;/&nbsp;<span id="epMax">600</span></div>
+  </div>
+
+  <div class="main">
+
+    <div class="graph-col panel">
+      <div class="panel-title">Середовище (сітка станів = граф суміжних клітинок)</div>
+      <svg id="gridSvg" viewBox="0 0 454 396">
+        <g id="cellLayer"></g>
+        <polyline id="pathLine" class="path-line" points=""></polyline>
+        <g id="pathDots"></g>
+        <rect id="hoverCell" class="hover-cell" x="0" y="0" width="0" height="0" rx="3" visibility="hidden"></rect>
+        <circle id="agentHalo" cx="53" cy="53" r="19" fill="none" stroke="#4fd1c5" stroke-width="2.5" stroke-dasharray="4 4" opacity=".85"></circle>
+        <circle id="agent" cx="53" cy="53" r="7" fill="#4fd1c5" stroke="#12131a" stroke-width="2"></circle>
+      </svg>
+
+      <div class="legend">
+        <div><span class="dot" style="background:var(--accent)"></span>поточний найкращий (жадібний) шлях</div>
+        <div><span style="display:inline-block;width:12px;height:12px;border-radius:50%;border:2px dashed var(--agent);vertical-align:middle;margin-right:6px;"></span>жива позиція агента (проби й помилки)</div>
+        <div><span style="display:inline-block;width:14px;height:14px;background:#1b1d26;border:1px solid #3a3e4a;vertical-align:middle;margin-right:6px;"></span>перешкода — рух туди неможливий</div>
+        <div><span style="display:inline-block;width:14px;height:14px;background:var(--accent);opacity:.45;vertical-align:middle;margin-right:6px;"></span>яскравість = навчене значення V(s)</div>
+        <div class="mono">вага переходу — 1, ділянки «3×» коштують дорожче</div>
+      </div>
+    </div>
+
+    <div class="side-col">
+
+      <div class="panel">
+        <div class="panel-title">Редактор середовища</div>
+        <div class="dims">
+          <label>Стовпці <input type="number" id="colsIn" class="mono" min="3" max="100" value="7"></label>
+          <label>Рядки <input type="number" id="rowsIn" class="mono" min="3" max="100" value="6"></label>
+        </div>
+        <div class="tools" id="tools">
+          <button data-tool="obstacle" class="active">Перешкода</button>
+          <button data-tool="rough">Ділянка 3×</button>
+          <button data-tool="start">Старт</button>
+          <button data-tool="finish">Фініш</button>
+          <button data-tool="erase">Гумка</button>
+        </div>
+        <div class="btns small">
+          <button id="btnClear">Очистити</button>
+          <button id="btnRandom">Випадково</button>
+          <button id="btnDefault">Стандартна</button>
+        </div>
+        <div class="hint">Оберіть інструмент і клацніть або проведіть мишею по клітинках сітки. Повторне клацання перешкодою чи ділянкою 3× прибирає її. Після будь-якої зміни середовища навчання починається заново. Розмір — до 100×100 клітинок; для великих сіток (понад 20×20) встановіть γ ≈ 0.99 і користуйтеся «Швидким навчанням».</div>
+        <div class="warn" id="envWarn" hidden>Фініш недосяжний зі старту: приберіть частину перешкод.</div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Параметри навчання</div>
+        <div class="grid2">
+          <div class="slider-row"><div class="top"><span>Швидкість навчання, α</span><span class="mono" id="alphaVal">0.35</span></div><input type="range" id="alpha" min="0" max="1" step="0.01" value="0.35"></div>
+          <div class="slider-row"><div class="top"><span>Дисконтування, γ</span><span class="mono" id="gammaVal">0.90</span></div><input type="range" id="gamma" min="0" max="1" step="0.01" value="0.9"></div>
+          <div class="slider-row"><div class="top"><span>Дослідження, ε</span><span class="mono" id="epsVal">0.12</span></div><input type="range" id="eps" min="0" max="1" step="0.01" value="0.12"></div>
+          <div class="slider-row"><div class="top"><span>Швидкість анімації</span><span class="mono" id="speedVal">×3</span></div><input type="range" id="speed" min="1" max="10" step="1" value="3"></div>
+        </div>
+        <div class="field-row"><span style="font-size:12px;color:var(--text-dim)">Максимум епізодів</span><input type="text" id="maxEp" class="mono" value="600"></div>
+        <div class="btns">
+          <button class="primary" id="btnStart">Старт</button>
+          <button id="btnPause">Пауза</button>
+          <button id="btnReset">Скинути</button>
+          <button id="btnStep">Крок</button>
+        </div>
+        <div class="btns" style="margin-top:8px;">
+          <button id="btnFast" title="Проганяє епізоди без покрокової анімації — зручно для великих сіток">Швидке навчання (без анімації)</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Обчислення на поточному кроці</div>
+        <div class="code-box mono" id="rewardBox">
+          <div>натисніть «Крок» або «Старт», щоб побачити перехід</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Q-значення вздовж поточного найкращого шляху</div>
+        <div id="matrix" style="max-height:200px;overflow-y:auto;"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Стан симуляції</div>
+        <div class="slider-row" style="margin-bottom:12px;">
+          <div class="top"><span>Прогрес навчання</span><span class="mono" id="progText">0 / 600</span></div>
+          <div class="progress-track"><div class="progress-fill" id="progFill" style="width:0%"></div></div>
+        </div>
+        <div class="stat-tiles" style="margin-bottom:12px;">
+          <div class="tile"><div class="k">Кроків в епізоді</div><div class="v mono" id="stepsVal">0</div></div>
+          <div class="tile"><div class="k">Винагорода за епізод</div><div class="v mono" id="rewardVal" style="color:var(--positive)">+0.0</div></div>
+        </div>
+        <div style="font-size:11px;color:var(--text-faint);margin-bottom:4px;">Винагорода за останні епізоди</div>
+        <svg viewBox="0 0 360 46" style="height:46px;margin-bottom:14px;"><polyline id="sparkline" fill="none" stroke="var(--positive)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" points=""></polyline></svg>
+        <div class="status-pill paused" id="statusPill"><span class="status-dot"></span><span id="statusText">Пауза</span></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="qhead">
+      <div class="panel-title" style="margin:0">Таблиця Q-значень Q(s, a)</div>
+      <div class="qactions">
+        <button id="btnToggleQ">Показати таблицю</button>
+        <button id="btnCsv">Завантажити CSV</button>
+        <button id="btnJson">Завантажити JSON</button>
+      </div>
+    </div>
+    <div class="qnote">Рядки — стани (прохідні клітинки), стовпці — дії. «—» означає, що дія неможлива (стіна, перешкода або край сітки). Найкраща дія виділена кольором, рамкою — значення, оновлене на останньому кроці. CSV відкривається в Excel, JSON містить також параметри навчання та карту.</div>
+    <div class="qwrap" id="qWrap" hidden><table class="qtable mono" id="qTable"></table></div>
+  </div>
+
+  <div class="foot">Демонстраційний тренажер до науково-дослідницької роботи МАН «Інтелектуальний агент та методи його навчання». Клітинки сітки — це вузли графа, сусідні прохідні клітинки — його ребра; розмір сітки, перешкоди, старт і фініш можна змінювати в редакторі середовища; шлях ніде не заданий наперед, агент знаходить його сам методом проб і помилок. Обчислення виконуються локально у браузері — інтернет не потрібен.</div>
+</div>
+
+<script>
+(function(){
+  const CELL=58, PAD=24;
+  const MIN_COLS=3, MAX_COLS=100, MIN_ROWS=3, MAX_ROWS=100;
+  // на великих сітках вимикаємо підписи в клітинках і анімацію заливки
+  const isBig=()=>COLS>20 || ROWS>20;
+  const DEFAULT_ENV={ cols:7, rows:6,
+    obstacles:['1,1','3,1','2,2','4,2','2,3','4,3','4,5','1,4'],
+    rough:['5,1','3,4'], start:'0,0', finish:'6,5' };
+  let COLS, ROWS, OBSTACLES, ROUGH, START, FINISH;
+  function loadEnv(e){
+    COLS=e.cols; ROWS=e.rows; OBSTACLES=new Set(e.obstacles); ROUGH=new Set(e.rough);
+    START=e.start; FINISH=e.finish;
+  }
+  loadEnv(DEFAULT_ENV);
+  const cellId=(c,r)=>c+','+r;
+  const parseId=(id)=>id.split(',').map(Number);
+  const inBounds=(c,r)=>c>=0&&c<COLS&&r>=0&&r<ROWS;
+  const isObstacle=(c,r)=>OBSTACLES.has(cellId(c,r));
+  const isRough=(c,r)=>ROUGH.has(cellId(c,r));
+
+  const DIRS=[[0,-1,'ВГОРУ'],[0,1,'ВНИЗ'],[-1,0,'ВЛІВО'],[1,0,'ВПРАВО']];
+  // сусіди кожної клітинки кешуються; кеш скидається при зміні середовища
+  let NB=new Map();
+  function neighbors(id){
+    let res=NB.get(id);
+    if(res) return res;
+    const [c,r]=parseId(id);
+    res=[];
+    for(const [dc,dr,label] of DIRS){
+      const nc=c+dc, nr=r+dr;
+      if(inBounds(nc,nr) && !isObstacle(nc,nr)){
+        const nid=cellId(nc,nr);
+        res.push({id:nid, key:id+'>'+nid, cost:isRough(nc,nr)?3:1, dir:label});
+      }
+    }
+    NB.set(id,res);
+    return res;
+  }
+  function cellCenter(id){ const [c,r]=parseId(id); return {x:PAD+c*CELL+CELL/2, y:PAD+r*CELL+CELL/2}; }
+
+  let Q = {};
+  const getQ=(k)=>Q[k]||0;
+  const setQ=(k,v)=>{Q[k]=v;};
+
+  let alpha=.35, gamma=.9, epsilon=.12, speed=3, maxEpisodes=600;
+  let state=START, episode=0, steps=0, epReward=0, running=false, timer=null;
+  let rewardHistory=[];
+  let lastTransition=null;
+  let envOk=true, statusKind='paused';
+  // ліміт кроків в епізоді росте разом із розміром сітки
+  const stepCap=()=>Math.max(100, COLS*ROWS*3);
+
+  function finishReachable(){
+    const seen=new Set([START]), queue=[START];
+    while(queue.length){
+      const cur=queue.shift();
+      if(cur===FINISH) return true;
+      for(const n of neighbors(cur)) if(!seen.has(n.id)){ seen.add(n.id); queue.push(n.id); }
+    }
+    return false;
+  }
+
+  function maxQFrom(id){
+    const opts=neighbors(id);
+    if(!opts.length) return 0;
+    let m=getQ(opts[0].key);
+    for(let i=1;i<opts.length;i++){ const q=getQ(opts[i].key); if(q>m) m=q; }
+    return m;
+  }
+  function chooseAction(id){
+    const opts=neighbors(id);
+    if(!opts.length) return null;
+    if(Math.random()<epsilon) return opts[Math.floor(Math.random()*opts.length)];
+    let best=opts[0], bestQ=getQ(best.key);
+    for(const o of opts){ const q=getQ(o.key); if(q>bestQ){bestQ=q;best=o;} }
+    return best;
+  }
+  function greedyPath(){
+    const path=[START]; const visited=new Set([START]); let cur=START;
+    for(let i=0;i<COLS*ROWS;i++){
+      const opts=neighbors(cur); if(!opts.length) break;
+      let best=opts[0], bestQ=getQ(best.key);
+      for(const o of opts){ const q=getQ(o.key); if(q>bestQ){bestQ=q;best=o;} }
+      if(visited.has(best.id)) break;
+      path.push(best.id);
+      if(best.id===FINISH) break;
+      visited.add(best.id); cur=best.id;
+    }
+    return path;
+  }
+
+  function applyStep(fromId){
+    const action=chooseAction(fromId);
+    if(!action) return null;
+    const toId=action.id, isGoal=toId===FINISH;
+    const reward=-action.cost+(isGoal?50:0);
+    const key=action.key;
+    const oldQ=getQ(key);
+    const maxNext=isGoal?0:maxQFrom(toId);
+    const newQ=oldQ+alpha*(reward+gamma*maxNext-oldQ);
+    setQ(key,newQ);
+    return {toId, oldQ, newQ, reward, cost:action.cost, dir:action.dir, isGoal};
+  }
+  function runEpisodeSilent(){
+    let s=START, steps0=0, epR=0;
+    while(s!==FINISH && steps0<stepCap()){
+      const res=applyStep(s); if(!res) break;
+      epR+=res.reward; steps0++; s=res.toId;
+    }
+    return epR;
+  }
+
+  function step(){
+    if(!envOk) return;
+    if(episode>=maxEpisodes){ stopRun('done'); return; }
+    const res=applyStep(state);
+    if(!res){ finishEpisode(); render(); return; }
+    const [fx,fy]=parseId(state), [tx,ty]=parseId(res.toId);
+    lastTransition={fx,fy,tx,ty,dir:res.dir,cost:res.cost,r:res.reward,oldQ:res.oldQ,newQ:res.newQ,stepNo:steps+1,goal:res.isGoal};
+    epReward+=res.reward; steps++; state=res.toId;
+    if(res.isGoal || steps>=stepCap()) finishEpisode();
+    render();
+  }
+  function finishEpisode(){
+    rewardHistory.push(epReward);
+    if(rewardHistory.length>40) rewardHistory.shift();
+    episode++; state=START; steps=0; epReward=0;
+    if(episode>=maxEpisodes) stopRun('done');
+  }
+  function startRun(){
+    if(running || episode>=maxEpisodes || !envOk) return;
+    running=true; setStatus('running');
+    const ms=Math.max(35, 500-speed*45);
+    timer=setInterval(step, ms);
+  }
+  // швидке навчання: цілі епізоди без анімації, порціями по ~25 мс на кадр
+  let fast=false;
+  function startFast(){
+    if(running || episode>=maxEpisodes || !envOk) return;
+    running=true; fast=true; setStatus('running');
+    state=START; steps=0; epReward=0;
+    let lastDraw=0;
+    const loop=()=>{
+      if(!running || !fast) return;
+      const t0=performance.now();
+      while(performance.now()-t0<25 && episode<maxEpisodes){
+        rewardHistory.push(runEpisodeSilent());
+        if(rewardHistory.length>40) rewardHistory.shift();
+        episode++;
+      }
+      // перемальовуємо не частіше ніж 4 рази на секунду, решту часу — навчання
+      const now=performance.now();
+      if(now-lastDraw>250 || episode>=maxEpisodes){ lastDraw=now; render(); }
+      if(episode>=maxEpisodes) stopRun('done'); else setTimeout(loop, 0);
+    };
+    setTimeout(loop, 0);
+  }
+  function pauseRun(){ running=false; fast=false; clearInterval(timer); setStatus('paused'); }
+  function stopRun(label){ running=false; fast=false; clearInterval(timer); setStatus(label); }
+  function resetAll(){
+    pauseRun(); Q={}; state=START; episode=0; steps=0; epReward=0; rewardHistory=[]; lastTransition=null;
+    $('rewardBox').innerHTML='<div>натисніть «Крок» або «Старт», щоб побачити перехід</div>';
+    setStatus('paused'); render();
+  }
+  function setStatus(kind){
+    statusKind=kind;
+    const pill=$('statusPill'), txt=$('statusText');
+    pill.className='status-pill '+kind;
+    txt.textContent = kind==='running' ? (fast ? 'Швидке навчання…' : 'Навчання…') : kind==='done' ? 'Завершено' : 'Пауза';
+    $('btnStart').disabled = (kind==='done') || !envOk;
+    $('btnFast').disabled = (kind==='done') || !envOk;
+    $('btnStep').disabled = !envOk;
+  }
+
+  // ---------- редактор середовища ----------
+  let tool='obstacle', paint=null, lastPainted=null;
+
+  function envChanged(){
+    NB=new Map();
+    envOk=finishReachable();
+    $('envWarn').hidden=envOk;
+    $('colsIn').value=COLS; $('rowsIn').value=ROWS;
+    buildGrid();
+    resetAll();
+  }
+  function resizeGrid(c,r){
+    c=Math.min(MAX_COLS,Math.max(MIN_COLS,isFinite(c)?c:COLS));
+    r=Math.min(MAX_ROWS,Math.max(MIN_ROWS,isFinite(r)?r:ROWS));
+    const finishWasCorner = FINISH===cellId(COLS-1,ROWS-1);
+    COLS=c; ROWS=r;
+    const fits=(id)=>{ const [x,y]=parseId(id); return inBounds(x,y); };
+    OBSTACLES=new Set([...OBSTACLES].filter(fits));
+    ROUGH=new Set([...ROUGH].filter(fits));
+    const clampId=(id)=>{ const [x,y]=parseId(id); return cellId(Math.min(x,COLS-1),Math.min(y,ROWS-1)); };
+    START=clampId(START);
+    FINISH = finishWasCorner ? cellId(COLS-1,ROWS-1) : clampId(FINISH);
+    if(FINISH===START) FINISH = START===cellId(COLS-1,ROWS-1) ? cellId(0,0) : cellId(COLS-1,ROWS-1);
+    OBSTACLES.delete(START); OBSTACLES.delete(FINISH);
+    envChanged();
+  }
+  function paintCell(id){
+    lastPainted=id;
+    if(id===START || id===FINISH) return;
+    const hadO=OBSTACLES.has(id), hadR=ROUGH.has(id);
+    if(paint.mode==='erase'){
+      if(tool==='erase' || tool==='obstacle') OBSTACLES.delete(id);
+      if(tool==='erase' || tool==='rough') ROUGH.delete(id);
+    } else if(tool==='obstacle'){ OBSTACLES.add(id); ROUGH.delete(id); }
+    else if(tool==='rough'){ ROUGH.add(id); OBSTACLES.delete(id); }
+    if(hadO!==OBSTACLES.has(id) || hadR!==ROUGH.has(id)) envChanged();
+  }
+  function placeTerminal(id){
+    if(tool==='start'){ if(id===FINISH||id===START) return; START=id; }
+    else { if(id===START||id===FINISH) return; FINISH=id; }
+    OBSTACLES.delete(id);
+    envChanged();
+  }
+  function randomObstacles(){
+    for(let attempt=0; attempt<200; attempt++){
+      OBSTACLES=new Set(); ROUGH=new Set();
+      for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+        const id=cellId(c,r); if(id===START||id===FINISH) continue;
+        const x=Math.random();
+        if(x<0.22) OBSTACLES.add(id); else if(x<0.28) ROUGH.add(id);
+      }
+      if(finishReachable()) break;
+    }
+    envChanged();
+  }
+  function cellFromEvent(e){
+    const svg=$('gridSvg'), pt=svg.createSVGPoint();
+    pt.x=e.clientX; pt.y=e.clientY;
+    const p=pt.matrixTransform(svg.getScreenCTM().inverse());
+    const c=Math.floor((p.x-PAD)/CELL), r=Math.floor((p.y-PAD)/CELL);
+    return inBounds(c,r) ? cellId(c,r) : null;
+  }
+  function showHover(id){
+    const h=$('hoverCell');
+    if(!id){ h.setAttribute('visibility','hidden'); return; }
+    const [c,r]=parseId(id);
+    h.setAttribute('x',PAD+c*CELL+2); h.setAttribute('y',PAD+r*CELL+2);
+    h.setAttribute('width',CELL-4); h.setAttribute('height',CELL-4);
+    h.setAttribute('visibility','visible');
+  }
+
+  const $=(id)=>document.getElementById(id);
+
+  // ---------- таблиця Q-значень ----------
+  let qVisible=false;
+  const ARROWS={'ВГОРУ':'↑','ВНИЗ':'↓','ВЛІВО':'←','ВПРАВО':'→'};
+
+  function cellKind(id){
+    const [c,r]=parseId(id);
+    if(id===START) return 'старт';
+    if(id===FINISH) return 'фініш';
+    return isRough(c,r) ? 'ділянка 3×' : 'звичайна';
+  }
+  // дані таблиці: один рядок на кожен прохідний стан
+  function qTableData(){
+    const rows=[];
+    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+      if(isObstacle(c,r)) continue;
+      const id=cellId(c,r);
+      const q={}; let explored=false;
+      for(const [dc,dr,label] of DIRS){
+        const nc=c+dc, nr=r+dr;
+        if(!inBounds(nc,nr) || isObstacle(nc,nr)){ q[label]=null; continue; }
+        const key=id+'>'+cellId(nc,nr);
+        if(key in Q) explored=true;
+        q[label]=getQ(key);
+      }
+      let best=null;
+      for(const [, , label] of DIRS) if(q[label]!==null && (best===null || q[label]>q[best])) best=label;
+      rows.push({ id, col:c, row:r, kind:cellKind(id), q,
+        v: best===null ? 0 : q[best], best: explored ? best : null });
+    }
+    return rows;
+  }
+  // на великих сітках таблиця перебудовується не частіше ніж раз на 0.5 с
+  let qLast=0, qTimer=null;
+  function renderQTable(force){
+    if(!qVisible) return;
+    const gap = COLS*ROWS>400 ? 500 : 0, now=performance.now();
+    if(!force && now-qLast<gap){
+      if(!qTimer) qTimer=setTimeout(()=>{ qTimer=null; renderQTable(true); }, gap-(now-qLast));
+      return;
+    }
+    qLast=now;
+    const data=qTableData();
+    const lastFrom = lastTransition ? cellId(lastTransition.fx,lastTransition.fy) : null;
+    const lastTo = lastTransition ? cellId(lastTransition.tx,lastTransition.ty) : null;
+    let html='<thead><tr><th>Стан (x,y)</th><th>Тип</th>'+
+      DIRS.map(d=>'<th>'+ARROWS[d[2]]+' '+d[2]+'</th>').join('')+
+      '<th>V(s) = max Q</th><th>Найкраща дія</th></tr></thead><tbody>';
+    for(const row of data){
+      html+='<tr'+(row.id===state?' class="cur"':'')+'><td>('+row.col+','+row.row+')</td><td class="kind">'+row.kind+'</td>';
+      for(const [dc,dr,label] of DIRS){
+        const v=row.q[label];
+        if(v===null){ html+='<td class="na">—</td>'; continue; }
+        const cls=[];
+        if(row.best===label) cls.push('best');
+        if(row.id===lastFrom && cellId(row.col+dc,row.row+dr)===lastTo) cls.push('upd');
+        html+='<td'+(cls.length?' class="'+cls.join(' ')+'"':'')+'>'+v.toFixed(3)+'</td>';
+      }
+      html+='<td>'+row.v.toFixed(3)+'</td><td>'+(row.best ? ARROWS[row.best]+' '+row.best : '<span style="color:var(--text-faint)">не досліджено</span>')+'</td></tr>';
+    }
+    $('qTable').innerHTML=html+'</tbody>';
+  }
+
+  function downloadFile(name, text, type){
+    const url=URL.createObjectURL(new Blob([text],{type}));
+    const a=document.createElement('a');
+    a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }
+  const fileBase=()=>'q-table_'+COLS+'x'+ROWS+'_ep'+episode;
+  // CSV для Excel: розділювач «;», десяткова кома, BOM для кирилиці
+  function exportCsv(){
+    const num=(v)=>v===null?'':v.toFixed(4).replace('.',',');
+    const lines=[['Стан','x','y','Тип',...DIRS.map(d=>d[2]),'V(s)','Найкраща дія'].join(';')];
+    for(const row of qTableData()){
+      lines.push(['('+row.col+','+row.row+')',row.col,row.row,row.kind,
+        ...DIRS.map(d=>num(row.q[d[2]])),num(row.v),row.best||''].join(';'));
+    }
+    downloadFile(fileBase()+'.csv','﻿'+lines.join('\r\n'),'text/csv;charset=utf-8');
+  }
+  function exportJson(){
+    const out={
+      created:new Date().toISOString(),
+      params:{alpha,gamma,epsilon,episode,maxEpisodes},
+      environment:{cols:COLS,rows:ROWS,start:START,finish:FINISH,
+        obstacles:[...OBSTACLES],rough:[...ROUGH]},
+      table:qTableData().map(r=>({state:r.id,x:r.col,y:r.row,type:r.kind,
+        Q:r.q,V:+r.v.toFixed(6),bestAction:r.best})),
+      greedyPath:greedyPath()
+    };
+    downloadFile(fileBase()+'.json',JSON.stringify(out,null,2),'application/json');
+  }
+
+  // кеш елементів заливки та підписів — щоб не шукати їх у DOM на кожному кроці
+  let fillEls=new Map(), valEls=new Map(), fillCache=new Map(), shownVals=[];
+  function buildGrid(){
+    const big=isBig();
+    const svg=$('gridSvg');
+    svg.setAttribute('viewBox','0 0 '+(PAD*2+COLS*CELL)+' '+(PAD*2+ROWS*CELL));
+    svg.classList.toggle('big', big);
+    let html='';
+    for(let r=0;r<ROWS;r++){
+      for(let c=0;c<COLS;c++){
+        const id=cellId(c,r), x=PAD+c*CELL, y=PAD+r*CELL;
+        if(isObstacle(c,r)){
+          html+='<rect x="'+x+'" y="'+y+'" width="'+CELL+'" height="'+CELL+'" class="obstacle-cell"></rect>';
+          if(!big){
+            html+='<line x1="'+(x+7)+'" y1="'+(y+CELL-7)+'" x2="'+(x+CELL-7)+'" y2="'+(y+7)+'" class="hatch"></line>';
+            html+='<line x1="'+(x+7)+'" y1="'+(y+7)+'" x2="'+(x+CELL-7)+'" y2="'+(y+CELL-7)+'" class="hatch"></line>';
+          }
+        } else {
+          html+='<rect x="'+(x+1)+'" y="'+(y+1)+'" width="'+(CELL-2)+'" height="'+(CELL-2)+'" class="free-cell'+(isRough(c,r)?' rough-cell':'')+'"></rect>';
+          html+='<rect id="fill-'+id+'" x="'+(x+1)+'" y="'+(y+1)+'" width="'+(CELL-2)+'" height="'+(CELL-2)+'" class="value-fill" fill-opacity="0"></rect>';
+          if(id===START||id===FINISH) html+='<rect x="'+(x+1)+'" y="'+(y+1)+'" width="'+(CELL-2)+'" height="'+(CELL-2)+'" class="terminal-cell"></rect>';
+          if(!big){
+            if(isRough(c,r)) html+='<text x="'+(x+CELL-6)+'" y="'+(y+14)+'" text-anchor="end" class="rough-tag">3×</text>';
+            html+='<text id="val-'+id+'" x="'+(x+6)+'" y="'+(y+CELL-7)+'" class="cell-val" opacity="0">0</text>';
+            if(id===START) html+='<text x="'+(x+CELL/2)+'" y="'+(y+CELL/2+3)+'" text-anchor="middle" class="cell-tag">СТАРТ</text>';
+            if(id===FINISH) html+='<text x="'+(x+CELL/2)+'" y="'+(y+CELL/2+3)+'" text-anchor="middle" class="cell-tag">ФІНІШ</text>';
+          }
+        }
+      }
+    }
+    $('cellLayer').innerHTML=html;
+    fillEls=new Map(); valEls=new Map(); fillCache=new Map(); shownVals=[];
+    $('cellLayer').querySelectorAll('.value-fill').forEach(el=>fillEls.set(el.id.slice(5),el));
+    $('cellLayer').querySelectorAll('.cell-val').forEach(el=>valEls.set(el.id.slice(4),el));
+  }
+
+  // скільки одиниць viewBox припадає на один піксель екрана
+  function unitsPerPx(){
+    const rect=$('gridSvg').getBoundingClientRect();
+    // сітку не видно (згорнута вкладка) — оцінюємо масштаб для ширини ~700 px
+    if(!rect.width || !rect.height) return (PAD*2+Math.max(COLS,ROWS)*CELL)/700;
+    return Math.max((PAD*2+COLS*CELL)/rect.width, (PAD*2+ROWS*CELL)/rect.height);
+  }
+
+  function render(){
+    const big=isBig();
+    const V=new Map();
+    let minV=Infinity, maxV=-Infinity;
+    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+      if(isObstacle(c,r)) continue;
+      const id=cellId(c,r), v=maxQFrom(id);
+      V.set(id,v); if(v<minV) minV=v; if(v>maxV) maxV=v;
+    }
+    const range=(maxV-minV)||1;
+    for(const [id,v] of V){
+      const op=(0.04+0.55*(v-minV)/range).toFixed(3);
+      if(fillCache.get(id)!==op){ fillCache.set(id,op); fillEls.get(id).setAttribute('fill-opacity',op); }
+    }
+
+    for(const t of shownVals) t.style.opacity=0;
+    shownVals=[];
+    const path=greedyPath();
+    const pts=[];
+    path.forEach(id=>{
+      const p=cellCenter(id); pts.push(p.x+','+p.y);
+      const v=valEls.get(id); if(v){ v.textContent=V.get(id).toFixed(1); v.style.opacity=1; shownVals.push(v); }
+    });
+    // на великій сітці розміри агента й точок задаються в пікселях екрана
+    const u=big ? unitsPerPx() : 1;
+    const dotR=big ? Math.min(1.6*u, CELL*0.3) : 3.2;
+    $('pathLine').setAttribute('points', pts.join(' '));
+    $('pathDots').innerHTML = path.map(id=>{ const p=cellCenter(id); return '<circle cx="'+p.x+'" cy="'+p.y+'" r="'+dotR+'" fill="var(--accent)"></circle>'; }).join('');
+
+    const pos=cellCenter(state);
+    $('agent').setAttribute('cx',pos.x); $('agent').setAttribute('cy',pos.y);
+    $('agentHalo').setAttribute('cx',pos.x); $('agentHalo').setAttribute('cy',pos.y);
+    $('agent').setAttribute('r', big ? 4*u : 7);
+    $('agentHalo').setAttribute('r', big ? 9*u : 19);
+
+    if(lastTransition){
+      const t=lastTransition;
+      $('rewardBox').innerHTML =
+        'крок '+t.stepNo+' · клітинка ('+t.fx+','+t.fy+') → дія: '+t.dir+' → ('+t.tx+','+t.ty+')<br>'+
+        'r = '+(t.r>=0?'+':'')+t.r.toFixed(2)+'&nbsp;&nbsp;(вартість переходу '+t.cost+(t.goal?', бонус за фініш +50':'')+')<br>'+
+        'Q(s,a) ← Q + α·[ r + γ·maxQ(s′,·) − Q ]<br>'+
+        '<span class="delta">'+t.oldQ.toFixed(2)+' → '+t.newQ.toFixed(2)+'</span>';
+    }
+
+    const matrixEl=$('matrix');
+    if(path.length<2){
+      matrixEl.innerHTML='<div class="empty-note">агент ще не проклав стабільного шляху до фінішу — натисніть «Старт»</div>';
+    } else {
+      let rows='';
+      for(let i=0;i<path.length-1;i++){
+        const [ax,ay]=parseId(path[i]), [bx,by]=parseId(path[i+1]);
+        const val=getQ(path[i]+'>'+path[i+1]);
+        const pct=Math.max(4,Math.min(100,(val/(maxV||1))*100));
+        rows+='<div class="matrix-row"><span class="matrix-key active mono">('+ax+','+ay+') → ('+bx+','+by+')</span>'+
+              '<span style="display:flex;align-items:center;gap:8px;"><span class="bar-track"><span class="bar-fill" style="width:'+pct+'%"></span></span>'+
+              '<span class="matrix-val mono">'+val.toFixed(2)+'</span></span></div>';
+      }
+      matrixEl.innerHTML=rows;
+    }
+
+    $('epNow').textContent=episode; $('epMax').textContent=maxEpisodes;
+    $('progText').textContent=episode+' / '+maxEpisodes;
+    $('progFill').style.width=Math.min(100,(episode/maxEpisodes)*100)+'%';
+    $('stepsVal').textContent=steps;
+    $('rewardVal').textContent=(epReward>=0?'+':'')+epReward.toFixed(1);
+    $('rewardVal').style.color = epReward>=0 ? 'var(--positive)' : 'var(--negative)';
+
+    if(rewardHistory.length>1){
+      const mn=Math.min(...rewardHistory), mx=Math.max(...rewardHistory), rg=(mx-mn)||1, n=rewardHistory.length;
+      const p=rewardHistory.map((v,i)=>{
+        const x=n===1?0:(i/(n-1))*360, y=42-((v-mn)/rg)*36;
+        return x.toFixed(1)+','+y.toFixed(1);
+      }).join(' ');
+      $('sparkline').setAttribute('points',p);
+    } else { $('sparkline').setAttribute('points',''); }
+
+    renderQTable();
+  }
+
+  $('alpha').addEventListener('input', e=>{ alpha=parseFloat(e.target.value); $('alphaVal').textContent=alpha.toFixed(2); });
+  $('gamma').addEventListener('input', e=>{ gamma=parseFloat(e.target.value); $('gammaVal').textContent=gamma.toFixed(2); });
+  $('eps').addEventListener('input', e=>{ epsilon=parseFloat(e.target.value); $('epsVal').textContent=epsilon.toFixed(2); });
+  $('speed').addEventListener('input', e=>{
+    speed=parseInt(e.target.value,10); $('speedVal').textContent='×'+speed;
+    if(running){ pauseRun(); startRun(); }
+  });
+  $('maxEp').addEventListener('change', e=>{
+    const v=parseInt(e.target.value,10);
+    maxEpisodes=(isFinite(v)&&v>0)?v:600; e.target.value=maxEpisodes;
+    if(episode<maxEpisodes && $('statusText').textContent==='Завершено') setStatus('paused');
+    render();
+  });
+  $('btnStart').addEventListener('click', startRun);
+  $('btnPause').addEventListener('click', pauseRun);
+  $('btnReset').addEventListener('click', resetAll);
+  $('btnStep').addEventListener('click', ()=>{ if(!running) step(); });
+  $('btnFast').addEventListener('click', startFast);
+  window.addEventListener('resize', ()=>{ if(isBig()) render(); });
+
+  $('btnToggleQ').addEventListener('click', ()=>{
+    qVisible=!qVisible;
+    $('qWrap').hidden=!qVisible;
+    $('btnToggleQ').textContent = qVisible ? 'Сховати таблицю' : 'Показати таблицю';
+    renderQTable(true);
+  });
+  $('btnCsv').addEventListener('click', exportCsv);
+  $('btnJson').addEventListener('click', exportJson);
+
+  const onDims=()=>resizeGrid(parseInt($('colsIn').value,10), parseInt($('rowsIn').value,10));
+  $('colsIn').addEventListener('change', onDims);
+  $('rowsIn').addEventListener('change', onDims);
+  document.querySelectorAll('#tools button').forEach(b=>b.addEventListener('click', ()=>{
+    tool=b.dataset.tool;
+    document.querySelectorAll('#tools button').forEach(x=>x.classList.toggle('active', x===b));
+  }));
+  $('btnClear').addEventListener('click', ()=>{ OBSTACLES=new Set(); ROUGH=new Set(); envChanged(); });
+  $('btnRandom').addEventListener('click', randomObstacles);
+  $('btnDefault').addEventListener('click', ()=>{ loadEnv(DEFAULT_ENV); envChanged(); });
+
+  const svgEl=$('gridSvg');
+  svgEl.addEventListener('pointerdown', e=>{
+    const id=cellFromEvent(e); if(!id) return;
+    e.preventDefault();
+    if(tool==='start' || tool==='finish'){ placeTerminal(id); return; }
+    const set = tool==='rough' ? ROUGH : OBSTACLES;
+    paint={ mode: (tool==='erase' || set.has(id)) ? 'erase' : 'set' };
+    svgEl.setPointerCapture(e.pointerId);
+    paintCell(id);
+  });
+  svgEl.addEventListener('pointermove', e=>{
+    const id=cellFromEvent(e);
+    showHover(id);
+    if(paint && id && id!==lastPainted) paintCell(id);
+  });
+  ['pointerup','pointercancel'].forEach(t=>svgEl.addEventListener(t, ()=>{ paint=null; lastPainted=null; }));
+  svgEl.addEventListener('pointerleave', ()=>{ if(!paint) showHover(null); });
+
+  buildGrid();
+  const WARM=300;
+  for(let i=0;i<WARM;i++){
+    const r=runEpisodeSilent();
+    rewardHistory.push(r); if(rewardHistory.length>40) rewardHistory.shift();
+  }
+  episode=WARM; state=START; steps=0; epReward=0;
+  render();
+})();
+</script>
+
+</body></html>
