@@ -1,0 +1,38 @@
+{
+  "K1_default": {
+    "graph_sha256": "f476015ad0521fe189a13500ef042ca2403ad7efe51eb88dfaa3b6fd3480002a",
+    "free": 42,
+    "step_cap": 126,
+    "reachable": true
+  },
+  "K2_wall_gap": {
+    "graph_sha256": "1014cf4d124117bfc131e2282c2968aecce160381bd8b59ae0df3e5a65c6dcee",
+    "free": 37,
+    "step_cap": 126,
+    "reachable": true
+  },
+  "K3_rough": {
+    "graph_sha256": "61e9fa782c21fe53eb2db771f067886a6b2201a4a832240cf9a8d135081325f1",
+    "free": 42,
+    "step_cap": 126,
+    "reachable": true
+  },
+  "R1_10x8": {
+    "graph_sha256": "a2569e8da21fdfcba034c20ae5b40cd186470d2c11ca223e3e761018b5620b1e",
+    "free": 60,
+    "step_cap": 240,
+    "reachable": true
+  },
+  "R2_15x15": {
+    "graph_sha256": "7699e601c70af05adf00478d765e7b7ba5d7e2f26099caea10e378fcd7e01602",
+    "free": 171,
+    "step_cap": 675,
+    "reachable": true
+  },
+  "S_3x3": {
+    "graph_sha256": "af1abfd8d299394d59e4c5d10909dcb6f89ee3390a0a09aa92e185aa263ef648",
+    "free": 9,
+    "step_cap": 100,
+    "reachable": true
+  }
+}

@@ -4,7 +4,8 @@
     cd "C:\\Q-lerning and AI\\Platform for Interaction"
     & "..\\Pytorch_test\\.venv\\Scripts\\python.exe" tests\\bench_tabular.py
 
-На етапі 2 тест regression_perf.py вимагатиме ≥ 85 % цієї швидкості після рефакторингу.
+Це довідкове число (для звіту). Регресію швидкості перевіряє regression_perf.py — він порівнює
+поточний код із початковим з історії git почергово, бо абсолютні числа між запусками шумлять (INS-007).
 """
 import json
 import platform

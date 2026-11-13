@@ -5,31 +5,37 @@
 редактор середовища (до 100×100 клітинок), швидке навчання, таблиця Q(s,a)
 з експортом у CSV / JSON та ті самі оптимізації для великих сіток.
 
+Архітектура: логіка (середовище й агенти) — у пакеті qlearn/ поруч із цим файлом
+(«бекенд»); тут — інтерфейс tkinter («фронтенд») і фасад QModel.
+
 Запуск:  python q_learning_trainer.py
 Потрібен лише стандартний Python 3 (tkinter входить до складу).
 """
 
 import json
+import os
 import random
+import sys
 import time
 import tkinter as tk
-from collections import deque
 from datetime import datetime, timezone
 from functools import lru_cache
 from tkinter import filedialog, messagebox, ttk
 
+# Пакет qlearn лежить поруч із цим файлом: додаємо папку до шляху імпорту,
+# щоб програма запускалась з будь-якої поточної папки (і в тестах).
+_HERE = os.path.dirname(os.path.abspath(__file__))
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
+
+from qlearn.environment import DEFAULT_ENV, DIRS, GOAL_BONUS, GridEnv  # noqa: E402
+from qlearn.tabular import TabularAgent  # noqa: E402
+
 # ---------------------------------------------------------------- середовище
 CELL, PAD = 58, 24 #Скільки пікселів потрібго для клітинки та поля навколо клітинки
 MIN_COLS, MAX_COLS, MIN_ROWS, MAX_ROWS = 3, 100, 3, 100
-DEFAULT_ENV = {
-    "cols": 7, "rows": 6,
-    "obstacles": [],
-    "rough": [],
-    "start": (0, 0), "finish": (6, 5),
-}
-DIRS = [(0, -1, "ВГОРУ"), (0, 1, "ВНИЗ"), (-1, 0, "ВЛІВО"), (1, 0, "ВПРАВО")]
+# DEFAULT_ENV, DIRS, GOAL_BONUS — у qlearn/environment.py (імпорт угорі)
 ARROWS = {"ВГОРУ": "↑", "ВНИЗ": "↓", "ВЛІВО": "←", "ВПРАВО": "→"}
-GOAL_BONUS = 50
 WARM = 0
 HISTORY_LEN = 40
 
@@ -85,206 +91,135 @@ def signed(v, digits):
     return ("+" if v >= 0 else "") + f"{v:.{digits}f}"
 
 
-# ============================================================ модель + агент
-class QModel:
-    """Середовище (сітка-граф) і табличний Q-агент.
+# ============================================================ модель (фасад)
+def _env_field(name, doc):
+    """Поле середовища, яке читають і змінюють напряму (як раніше в QModel)."""
+    def get(self):
+        return getattr(self.env, name)
 
-    Стани зберігаються як цілі індекси i = r*cols + c, таблиця Q — плоский
-    список q[i*4 + slot], де slot — номер дії в DIRS. Сусіди кожної клітинки
-    обчислюються один раз (аналог кешу NB у HTML-версії).
+    def set_(self, value):
+        setattr(self.env, name, value)
+    return property(get, set_, doc=doc)
+
+
+def _agent_field(name, doc):
+    def get(self):
+        return getattr(self.agent, name)
+
+    def set_(self, value):
+        setattr(self.agent, name, value)
+    return property(get, set_, doc=doc)
+
+
+class QModel:
+    """Фасад для інтерфейсу: середовище (qlearn.GridEnv) + агент (qlearn.TabularAgent).
+
+    Зберігає колишній API QModel, тож App не змінювався. Стани — цілі i = r*cols + c,
+    таблиця Q — плаский список q[i*4 + slot], slot — номер дії в DIRS.
+    Редактор змінює cols/rows/obstacles/rough/start/finish напряму й потім викликає rebuild().
     """
 
     def __init__(self):
-        self.alpha, self.gamma, self.epsilon = 0.35, 0.9, 0.12
-        self.load_env(DEFAULT_ENV)
+        self.env = GridEnv(DEFAULT_ENV)
+        self.agent = TabularAgent(self.env)
+
+    # ---- поля середовища (читання й запис ідуть у self.env)
+    cols = _env_field("cols", "кількість стовпців")
+    rows = _env_field("rows", "кількість рядків")
+    obstacles = _env_field("obstacles", "множина клітинок-перешкод")
+    rough = _env_field("rough", "множина ділянок «3×»")
+    start = _env_field("start", "клітинка старту")
+    finish = _env_field("finish", "клітинка фінішу")
+
+    # ---- параметри навчання (повзунки змінюють їх напряму)
+    alpha = _agent_field("alpha", "швидкість навчання α")
+    gamma = _agent_field("gamma", "дисконтування γ")
+    epsilon = _agent_field("epsilon", "дослідження ε")
+
+    # ---- похідні дані (лише читання)
+    @property
+    def nb(self):
+        return self.env.nb
+
+    @property
+    def free(self):
+        return self.env.free
+
+    @property
+    def start_i(self):
+        return self.env.start_i
+
+    @property
+    def finish_i(self):
+        return self.env.finish_i
+
+    @property
+    def q(self):
+        return self.agent.q_snapshot()
+
+    @property
+    def visited(self):
+        return self.agent.visited
 
     # ---------------------------------------------------------- середовище
     def load_env(self, env):
-        self.cols, self.rows = env["cols"], env["rows"]
-        self.obstacles = set(env["obstacles"])
-        self.rough = set(env["rough"])
-        self.start, self.finish = env["start"], env["finish"]
-        self.rebuild()
-
-    def in_bounds(self, c, r):
-        return 0 <= c < self.cols and 0 <= r < self.rows
-
-    def is_big(self):
-        # на великих сітках вимикаємо підписи в клітинках
-        return self.cols > 20 or self.rows > 20
-
-    def idx(self, cell):
-        return cell[1] * self.cols + cell[0]
-
-    def cell_of(self, i):
-        return i % self.cols, i // self.cols
-
-    def step_cap(self):
-        # ліміт кроків в епізоді росте разом із розміром сітки
-        return max(100, self.cols * self.rows * 3)
+        self.env.load(env)
+        self.agent.reset()
 
     def rebuild(self):
         """Перебудова графа сусідів після зміни середовища; Q очищується."""
-        cols, rows = self.cols, self.rows
-        nb = [()] * (cols * rows)
-        free = []
-        for r in range(rows):
-            for c in range(cols):
-                if (c, r) in self.obstacles:
-                    continue
-                i = r * cols + c
-                free.append(i)
-                lst = []
-                for slot, (dc, dr, label) in enumerate(DIRS):
-                    nc, nr = c + dc, r + dr
-                    if 0 <= nc < cols and 0 <= nr < rows and (nc, nr) not in self.obstacles:
-                        cost = 3 if (nc, nr) in self.rough else 1
-                        lst.append((nr * cols + nc, i * 4 + slot, cost, label))
-                nb[i] = tuple(lst)
-        self.nb, self.free = nb, free
-        self.start_i, self.finish_i = self.idx(self.start), self.idx(self.finish)
-        self.reset_q()
+        self.env.rebuild()
+        self.agent.reset()
 
     def reset_q(self):
-        n = self.cols * self.rows * 4
-        self.q = [0.0] * n
-        self.visited = bytearray(n)  # чи оновлювалось Q для цієї пари (s,a)
+        self.agent.reset()
+
+    def in_bounds(self, c, r):
+        return self.env.in_bounds(c, r)
+
+    def is_big(self):
+        # на великих сітках вимикаємо підписи в клітинках
+        return self.env.cols > 20 or self.env.rows > 20
+
+    def idx(self, cell):
+        return self.env.idx(cell)
+
+    def cell_of(self, i):
+        return self.env.cell_of(i)
+
+    def step_cap(self):
+        return self.env.step_cap()
 
     def finish_reachable(self):
-        """Пошук у ширину від старту: чи досяжний фініш."""
-        seen = {self.start_i}
-        queue = deque([self.start_i])
-        while queue:
-            cur = queue.popleft()
-            if cur == self.finish_i:
-                return True
-            for o in self.nb[cur]:
-                if o[0] not in seen:
-                    seen.add(o[0])
-                    queue.append(o[0])
-        return False
+        return self.env.finish_reachable()
+
+    def edge_key(self, a, b):
+        return self.env.edge_key(a, b)
+
+    def cell_kind(self, cell):
+        return self.env.cell_kind(cell)
 
     # ---------------------------------------------------------------- агент
     def max_q_from(self, i):
-        opts = self.nb[i]
-        if not opts:
-            return 0.0
-        q = self.q
-        m = q[opts[0][1]]
-        for o in opts:
-            v = q[o[1]]
-            if v > m:
-                m = v
-        return m
+        return self.agent.max_q_from(i)
 
     def best_of(self, opts):
-        q = self.q
-        best = opts[0]
-        bq = q[best[1]]
-        for o in opts:
-            v = q[o[1]]
-            if v > bq:
-                bq, best = v, o
-        return best
+        return self.agent.best_of(opts)
 
     def choose_action(self, i):
-        opts = self.nb[i]
-        if not opts:
-            return None
-        if random.random() < self.epsilon:
-            return opts[int(random.random() * len(opts))]
-        return self.best_of(opts)
+        return self.agent.choose_action(i)
 
     def apply_step(self, i):
-        action = self.choose_action(i)
-        if action is None:
-            return None
-        to, key, cost, label = action
-        is_goal = to == self.finish_i
-        reward = -cost + (GOAL_BONUS if is_goal else 0)
-        old_q = self.q[key]
-        max_next = 0.0 if is_goal else self.max_q_from(to)
-        new_q = old_q + self.alpha * (reward + self.gamma * max_next - old_q)
-        self.q[key] = new_q
-        self.visited[key] = 1
-        return {"to": to, "key": key, "old_q": old_q, "new_q": new_q, "reward": reward,
-                "cost": cost, "dir": label, "goal": is_goal}
+        return self.agent.learn_step(i)
 
     def run_episode_silent(self):
-        """Повний епізод без анімації. Цикл розгорнуто вручну заради швидкості."""
-        q, nb, vis = self.q, self.nb, self.visited
-        alpha, gamma, eps = self.alpha, self.gamma, self.epsilon
-        fin, cap = self.finish_i, self.step_cap()
-        rnd = random.random
-        s, steps, ep_r = self.start_i, 0, 0.0
-        while s != fin and steps < cap:
-            opts = nb[s]
-            if not opts:
-                break
-            if rnd() < eps:
-                o = opts[int(rnd() * len(opts))]
-            else:
-                o = opts[0]
-                bq = q[o[1]]
-                for p in opts:
-                    v = q[p[1]]
-                    if v > bq:
-                        bq, o = v, p
-            to, key, cost = o[0], o[1], o[2]
-            if to == fin:
-                r = GOAL_BONUS - cost
-                mx = 0.0
-            else:
-                r = -cost
-                nopts = nb[to]
-                if nopts:
-                    mx = q[nopts[0][1]]
-                    for p in nopts:
-                        v = q[p[1]]
-                        if v > mx:
-                            mx = v
-                else:
-                    mx = 0.0
-            old = q[key]
-            q[key] = old + alpha * (r + gamma * mx - old)
-            vis[key] = 1
-            ep_r += r
-            steps += 1
-            s = to
-        return ep_r
+        """Повний епізод без анімації; повертає суму винагород (як раніше)."""
+        return self.agent.run_episode()["reward"]
 
     def greedy_path(self):
-        path = [self.start_i]
-        visited = {self.start_i}
-        cur = self.start_i
-        for _ in range(self.cols * self.rows):
-            opts = self.nb[cur]
-            if not opts:
-                break
-            nxt = self.best_of(opts)[0]
-            if nxt in visited:
-                break
-            path.append(nxt)
-            if nxt == self.finish_i:
-                break
-            visited.add(nxt)
-            cur = nxt
-        return path
-
-    def edge_key(self, a, b):
-        for o in self.nb[a]:
-            if o[0] == b:
-                return o[1]
-        return None
+        return self.agent.greedy_path()
 
     # ------------------------------------------------------- таблиця Q
-    def cell_kind(self, cell):
-        if cell == self.start:
-            return "старт"
-        if cell == self.finish:
-            return "фініш"
-        return "ділянка 3×" if cell in self.rough else "звичайна"
-
     def q_table_data(self):
         """Один рядок на кожен прохідний стан (спільне джерело для екрана, CSV, JSON)."""
         rows = []
