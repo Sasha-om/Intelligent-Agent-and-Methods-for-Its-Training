@@ -170,6 +170,26 @@ class AgentView:
         return self.agent.greedy_path()
 
 
+def convergence_episode(env, agent, gamma, max_episodes, eval_every=10, hold=100):
+    """Епізод, з якого жадібний шлях агента ОПТИМАЛЬНИЙ за дисконтованою винагородою (= V*(старт))
+    і лишається таким щонайменше hold епізодів (перевірка кожні eval_every). None — не зійшовся."""
+    target = env.optimal_return(gamma)
+    streak = None
+    for ep in range(1, max_episodes + 1):
+        agent.run_episode()
+        if ep % eval_every:
+            continue
+        path = agent.greedy_path()
+        ok = path[-1] == env.finish_i and abs(env.path_return(path, gamma) - target) < 1e-6
+        if not ok:
+            streak = None
+            continue
+        streak = streak or ep
+        if ep - streak >= hold:
+            return streak
+    return None
+
+
 def snapshot(model):
     """Ключові числа для golden-знімка."""
     path = model.greedy_path()
