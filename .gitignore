@@ -8,14 +8,15 @@
 # Харнес Claude Code: агенти, скіли, налаштування (теж лише локально)
 .claude/
 CLAUDE.local.md
-# Тимчасова папка з агентами/скілами; після перейменування на .claude цей рядок можна видалити
-_claude_pending/
 
 # Python
 .venv/
 venv/
 __pycache__/
 *.pyc
+
+# Службова папка десктоп-застосунку Claude
+Claude outputs/
 
 # Редактори
 .vscode/

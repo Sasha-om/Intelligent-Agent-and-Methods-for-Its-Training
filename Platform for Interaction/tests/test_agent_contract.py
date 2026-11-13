@@ -69,12 +69,16 @@ class AgentContract:
             assert b in {o[0] for o in agent.env.nb[a]}
 
     def test_reset_clears_learning(self, make_agent, maps):
+        """Після reset агент «нічого не знає»: жодна пара (s,a) не позначена як досліджена,
+        Q скінченні (для таблиці — нулі, це перевіряє test_tabular; для DQN — нова випадкова мережа)."""
         agent = make_agent(maps["K1_default"])
         random.seed(6)
         for _ in range(10):
             agent.run_episode()
+        assert any(agent.visited)
         agent.reset()
-        assert all(v == 0.0 for v in agent.q_snapshot())
+        assert not any(agent.visited)
+        assert all(math.isfinite(v) for v in agent.q_snapshot())
 
 
 class TestTabularContract(AgentContract):

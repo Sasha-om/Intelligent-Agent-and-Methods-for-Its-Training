@@ -3,6 +3,7 @@
 Еталон графа — tests/golden_env.json, знятий зі старого QModel до рефакторингу.
 """
 import json
+import os
 import subprocess
 import sys
 
@@ -13,6 +14,9 @@ import make_golden_env
 from qlearn.environment import DEFAULT_ENV, DIRS, GOAL_BONUS, GridEnv
 
 GOLDEN_ENV = json.loads((helpers.TESTS_DIR / "golden_env.json").read_text(encoding="utf-8"))
+
+# Дочірній Python на Windows пише в кодуванні консолі (cp1251), а ми читаємо UTF-8 — задаємо явно (INS-010).
+UTF8_ENV = dict(os.environ, PYTHONIOENCODING="utf-8")
 
 
 def test_constants_unchanged():
@@ -103,5 +107,43 @@ def test_backend_does_not_import_tkinter():
     code = ("import sys; import qlearn, qlearn.environment, qlearn.agent, qlearn.tabular; "
             "print('tkinter' in sys.modules)")
     out = subprocess.run([sys.executable, "-c", code], cwd=helpers.APP_DIR,
-                         capture_output=True, text=True, check=True)
+                         capture_output=True, text=True, encoding="utf-8", check=True, env=UTF8_ENV)
     assert out.stdout.strip() == "False"
+
+
+# ------------------------------------------- оптимум за дисконтованою винагородою (етап 3)
+def test_optimal_return_by_hand_k1(maps):
+    """K1: 11 кроків, 10 × (−1) і останній +49: V* = −(1 − 0.9¹⁰)/0.1 + 0.9¹⁰·49 ≈ 10.5720."""
+    env = GridEnv(maps["K1_default"])
+    expected = -(1 - 0.9 ** 10) / 0.1 + 0.9 ** 10 * 49
+    assert env.optimal_return(0.9) == pytest.approx(expected, abs=1e-9)
+    assert expected == pytest.approx(10.5720, abs=1e-4)
+
+
+def test_optimal_policy_k3_goes_through_rough(maps):
+    """K3 з γ=0.9: прямо через 5 дорогих клітинок (−3×5, +49) вигідніше за обхід (−1×9, +49):
+    16.649 > 12.858. Тобто найдешевший шлях (вартість 10) ≠ оптимальний за винагородою (вартість 16)."""
+    env = GridEnv(maps["K3_rough"])
+    straight = -3 * (1 + 0.9 + 0.81 + 0.729 + 0.6561) + 0.9 ** 5 * 49
+    detour = -(1 - 0.9 ** 9) / 0.1 + 0.9 ** 9 * 49
+    assert env.optimal_return(0.9) == pytest.approx(straight, abs=1e-9)
+    assert straight > detour
+    path = env.optimal_path(0.9)
+    assert len(path) - 1 == 6 and env.optimal_cost() == 10
+
+
+def test_optimal_policy_depends_on_gamma(maps):
+    """З γ=0.99 майбутнє важить більше — і на K3 вигідніший уже обхід (вартість 10)."""
+    env = GridEnv(maps["K3_rough"])
+    assert len(env.optimal_path(0.99)) - 1 == 10
+
+
+def test_path_return(maps):
+    env = GridEnv(maps["K1_default"])
+    path = env.optimal_path(0.9)
+    assert env.path_return(path, 0.9) == pytest.approx(env.optimal_return(0.9), abs=1e-9)
+    assert env.path_return([env.start_i], 0.9) == 0.0
+
+
+def test_optimal_values_unreachable_is_none():
+    assert GridEnv(helpers.UNREACHABLE).optimal_return(0.9) is None

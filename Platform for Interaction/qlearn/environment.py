@@ -134,6 +134,77 @@ class GridEnv:
                     heapq.heappush(heap, (nd, to))
         return None
 
+    # ------------------------------ оптимум за дисконтованою винагородою (те, що максимізує агент)
+    def optimal_values(self, gamma, tol=1e-12, max_iter=100000):
+        """Ітерація цінностей: V*(s) = max_a [r + γ·V*(s′)], на фініші продовження немає.
+        Точне розв'язання задачі, яку Q-навчання розв'язує наближено. None — для станів, звідки фініш недосяжний."""
+        values = {s: 0.0 for s in self.free}
+        reach = self._reaches_finish()
+        for _ in range(max_iter):
+            delta = 0.0
+            for s in self.free:
+                if s == self.finish_i or s not in reach:
+                    continue
+                best = max(self._step_value(o, values, gamma) for o in self.nb[s] if o[0] in reach)
+                delta = max(delta, abs(best - values[s]))
+                values[s] = best
+            if delta < tol:
+                break
+        return [values[s] if s in reach and s in values else None for s in range(self.cols * self.rows)]
+
+    def _step_value(self, o, values, gamma):
+        to, _key, cost, _label = o
+        if to == self.finish_i:
+            return self.reward(cost, True)
+        return self.reward(cost, False) + gamma * values[to]
+
+    def _reaches_finish(self):
+        """Стани, з яких можна дійти до фінішу (обхід від фінішу назад)."""
+        back = {s: [] for s in self.free}
+        for s in self.free:
+            for o in self.nb[s]:
+                back[o[0]].append(s)
+        seen, queue = {self.finish_i}, deque([self.finish_i])
+        while queue:
+            cur = queue.popleft()
+            for p in back.get(cur, ()):
+                if p not in seen:
+                    seen.add(p)
+                    queue.append(p)
+        return seen
+
+    def optimal_return(self, gamma):
+        """V*(старт) — найбільша дисконтована сума винагород; None, якщо фініш недосяжний."""
+        if not self.finish_reachable():
+            return None
+        return self.optimal_values(gamma)[self.start_i]
+
+    def optimal_path(self, gamma):
+        """Шлях оптимальної політики від старту (за V*); при рівних — перша дія за DIRS."""
+        values = self.optimal_values(gamma)
+        if values[self.start_i] is None:
+            return [self.start_i]
+        vals = {s: v for s, v in enumerate(values) if v is not None}
+        path, s = [self.start_i], self.start_i
+        while s != self.finish_i and len(path) <= self.cols * self.rows:
+            opts = [o for o in self.nb[s] if o[0] in vals]
+            best = opts[0]
+            for o in opts:
+                if self._step_value(o, vals, gamma) > self._step_value(best, vals, gamma) + 1e-12:
+                    best = o
+            s = best[0]
+            path.append(s)
+        return path
+
+    def path_return(self, path, gamma):
+        """Дисконтована сума винагород уздовж шляху (бонус — лише якщо шлях закінчується на фініші)."""
+        total, discount = 0.0, 1.0
+        for a, b in zip(path, path[1:]):
+            cost = next(o[2] for o in self.nb[a] if o[0] == b)
+            total += discount * self.reward(cost, b == self.finish_i)
+            discount *= gamma
+        return total
+
     # -------------------------------------------------------- серіалізація
     def to_dict(self):
         """Карта як словник (перешкоди й ділянки відсортовані — порядок не важить)."""

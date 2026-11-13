@@ -23,6 +23,15 @@ def test_defaults():
     assert agent.params() == {"alpha": 0.35, "gamma": 0.9, "epsilon": 0.12}
 
 
+def test_reset_zeroes_table(maps):
+    agent = make(maps["K1_default"])
+    random.seed(1)
+    for _ in range(10):
+        agent.run_episode()
+    agent.reset()
+    assert all(v == 0.0 for v in agent.q_snapshot())
+
+
 def test_update_by_hand(maps):
     agent = make(maps["S_3x3"], epsilon=0.0)
     res = agent.learn_step(agent.env.start_i)
