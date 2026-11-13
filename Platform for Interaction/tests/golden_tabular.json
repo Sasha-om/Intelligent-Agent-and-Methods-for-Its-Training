@@ -1,0 +1,94 @@
+{
+  "generated": "2026-11-13T11:25:00+00:00",
+  "python": "3.13.18",
+  "trainer_sha256": "2fa9258426fd792b6644b644d1e065000f07f678b4c0beeaf289f3a1fa147e5a",
+  "scenarios": {
+    "K1_default_seed0_600": {
+      "map": "K1_default",
+      "seed": 0,
+      "episodes": 600,
+      "params": {
+        "alpha": 0.35,
+        "gamma": 0.9,
+        "epsilon": 0.12
+      },
+      "snapshot": {
+        "path_len": 12,
+        "path_cost": 11,
+        "reaches_finish": true,
+        "sum_q_along_path": 294.851748307,
+        "q_sha256": "b3e94ddf8752c62ea256839a68748f9b3e52e909d55b343d4aa70996edb11bcd"
+      }
+    },
+    "K3_rough_seed1_800": {
+      "map": "K3_rough",
+      "seed": 1,
+      "episodes": 800,
+      "params": {
+        "alpha": 0.35,
+        "gamma": 0.9,
+        "epsilon": 0.12
+      },
+      "snapshot": {
+        "path_len": 11,
+        "path_cost": 10,
+        "reaches_finish": true,
+        "sum_q_along_path": 284.279720341,
+        "q_sha256": "b2583d3b55b7483c3e30cd72d47e7135f07c8c9d7c6d695bfbd8fc614d1f2b97"
+      }
+    },
+    "R1_10x8_seed2_800": {
+      "map": "R1_10x8",
+      "seed": 2,
+      "episodes": 800,
+      "params": {
+        "alpha": 0.35,
+        "gamma": 0.9,
+        "epsilon": 0.12
+      },
+      "snapshot": {
+        "path_len": 17,
+        "path_cost": 16,
+        "reaches_finish": true,
+        "sum_q_along_path": 320.671808858,
+        "q_sha256": "1e196bfc918a025348b5d81d4e7e6edad9e34a0a850ccc97e927044c17e916c8"
+      }
+    }
+  },
+  "export": {
+    "csv_header": "Стан;x;y;Тип;ВГОРУ;ВНИЗ;ВЛІВО;ВПРАВО;V(s);Найкраща дія",
+    "csv_lines": 43,
+    "csv_sha256": "eb6731176f986b69840c557650f6145869e17b37343501e9e20da7f8e14670e2",
+    "json_keys": [
+      "environment",
+      "greedyPath",
+      "params",
+      "table"
+    ],
+    "json_params_keys": [
+      "alpha",
+      "episode",
+      "epsilon",
+      "gamma",
+      "maxEpisodes"
+    ],
+    "json_environment_keys": [
+      "cols",
+      "finish",
+      "obstacles",
+      "rough",
+      "rows",
+      "start"
+    ],
+    "json_table_row_keys": [
+      "Q",
+      "V",
+      "bestAction",
+      "state",
+      "type",
+      "x",
+      "y"
+    ],
+    "json_sha256": "e2c142e814dd9dfb076032636e54c2cb505aa455c76db0de09d665930a627142"
+  }
+}

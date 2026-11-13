@@ -1,0 +1,11 @@
+{
+  "measured": "2026-11-13T11:29:32+00:00",
+  "python": "3.14.0",
+  "machine": "DESKTOP-J5NNAOH",
+  "episodes": 600,
+  "repeats": 7,
+  "episodes_per_sec_median": {
+    "K1_default": 98320.4,
+    "R2_15x15": 21061.8
+  }
+}
