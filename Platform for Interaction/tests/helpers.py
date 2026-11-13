@@ -141,6 +141,35 @@ def train(model, episodes, seed):
     return model
 
 
+class AgentView:
+    """Обгортка «середовище + агент» з тим самим API, що й QModel, для helpers.snapshot/path_cost."""
+
+    def __init__(self, env, agent):
+        self.env, self.agent = env, agent
+
+    @property
+    def nb(self):
+        return self.env.nb
+
+    @property
+    def q(self):
+        return self.agent.q_snapshot()
+
+    @property
+    def start_i(self):
+        return self.env.start_i
+
+    @property
+    def finish_i(self):
+        return self.env.finish_i
+
+    def edge_key(self, a, b):
+        return self.env.edge_key(a, b)
+
+    def greedy_path(self):
+        return self.agent.greedy_path()
+
+
 def snapshot(model):
     """Ключові числа для golden-знімка."""
     path = model.greedy_path()

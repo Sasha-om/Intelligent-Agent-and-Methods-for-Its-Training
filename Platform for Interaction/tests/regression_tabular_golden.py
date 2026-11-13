@@ -28,6 +28,25 @@ def test_golden_snapshot(trainer, maps, name):
     assert actual["q_sha256"] == exp["q_sha256"], "Q-таблиця відрізняється від golden-знімка"
 
 
+@pytest.mark.parametrize("name", sorted(make_golden.SCENARIOS))
+def test_golden_snapshot_direct_agent(maps, name):
+    """Той самий golden — але через qlearn.TabularAgent напряму, без фасаду тренажера (етап 2)."""
+    import random
+
+    from qlearn.environment import GridEnv
+    from qlearn.tabular import TabularAgent
+
+    expected = GOLDEN["scenarios"][name]
+    env = GridEnv(maps[expected["map"]])
+    agent = TabularAgent(env)
+    random.seed(expected["seed"])
+    for _ in range(expected["episodes"]):
+        agent.run_episode()
+    actual = helpers.snapshot(helpers.AgentView(env, agent))
+    assert actual["q_sha256"] == expected["snapshot"]["q_sha256"]
+    assert actual["path_cost"] == expected["snapshot"]["path_cost"]
+
+
 def test_known_baseline_numbers():
     """Числа, виміряні до початку робіт (2026-11-11): 12 клітинок, вартість 11, сума Q 294.8517."""
     snap = GOLDEN["scenarios"]["K1_default_seed0_600"]["snapshot"]
