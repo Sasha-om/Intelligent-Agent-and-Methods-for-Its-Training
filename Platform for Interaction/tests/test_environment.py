@@ -147,3 +147,12 @@ def test_path_return(maps):
 
 def test_optimal_values_unreachable_is_none():
     assert GridEnv(helpers.UNREACHABLE).optimal_return(0.9) is None
+
+
+def test_path_cost(maps):
+    """Вартість шляху (етап 4): сума вартостей переходів; None для неіснуючого переходу."""
+    env = GridEnv(maps["K3_rough"])
+    straight = [env.idx((c, 2)) for c in range(7)]
+    assert env.path_cost(straight) == 16
+    assert env.path_cost([env.start_i]) == 0
+    assert env.path_cost([env.idx((0, 2)), env.idx((2, 2))]) is None

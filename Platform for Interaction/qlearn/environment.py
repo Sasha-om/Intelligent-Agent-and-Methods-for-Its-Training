@@ -196,6 +196,16 @@ class GridEnv:
             path.append(s)
         return path
 
+    def path_cost(self, path):
+        """Сума вартостей переходів уздовж шляху; None, якщо в шляху є неіснуючий перехід."""
+        total = 0
+        for a, b in zip(path, path[1:]):
+            cost = next((o[2] for o in self.nb[a] if o[0] == b), None)
+            if cost is None:
+                return None
+            total += cost
+        return total
+
     def path_return(self, path, gamma):
         """Дисконтована сума винагород уздовж шляху (бонус — лише якщо шлях закінчується на фініші)."""
         total, discount = 0.0, 1.0
