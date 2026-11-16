@@ -14,6 +14,7 @@
 
 class Agent:
     name = "base"
+    whole_episodes = True    # епізод швидкий — EpisodeStepper може виконувати його цілим (run_episode)
 
     def __init__(self, env):
         self.env = env

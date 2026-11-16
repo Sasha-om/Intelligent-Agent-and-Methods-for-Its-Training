@@ -74,6 +74,7 @@ def build_network(n_in, hidden):
 
 class DQNAgent(Agent):
     name = "dqn"
+    whole_episodes = False   # епізод довгий — у GUI навчаємо окремими кроками (qlearn/stepper.py)
 
     def __init__(self, env, gamma=0.9, epsilon=0.12, **params):
         super().__init__(env)
@@ -207,22 +208,29 @@ class DQNAgent(Agent):
         return {"to": to, "key": key, "old_q": old_q, "new_q": new_q, "reward": reward,
                 "cost": cost, "dir": label, "goal": is_goal, "target": target, "loss": loss}
 
+    def quick_step(self, s):
+        """Один крок навчання без звіту (для порційного «Швидкого навчання»): (куди, винагорода, фініш?) або None."""
+        action = self.choose_action(s)
+        if action is None:
+            return None
+        to, key, cost, _label = action
+        is_goal = to == self.env.finish_i
+        reward = -cost + (GOAL_BONUS if is_goal else 0)
+        self._remember(s, key, reward, to, is_goal)
+        self._train_maybe()
+        self._q_cache = None
+        return to, reward, is_goal
+
     def run_episode(self):
-        """Повний епізод без анімації (без зайвих обчислень для звіту)."""
+        """Повний епізод без анімації — послідовність quick_step до фінішу або ліміту кроків."""
         env = self.env
         fin, cap = env.finish_i, env.step_cap()
         s, steps, ep_r = env.start_i, 0, 0.0
         while s != fin and steps < cap:
-            action = self.choose_action(s)
-            if action is None:
+            res = self.quick_step(s)
+            if res is None:
                 break
-            to, key, cost, _label = action
-            is_goal = to == fin
-            reward = -cost + (GOAL_BONUS if is_goal else 0)
-            self._remember(s, key, reward, to, is_goal)
-            self._train_maybe()
+            s, reward, _goal = res
             ep_r += reward
             steps += 1
-            s = to
-        self._q_cache = None
         return {"reward": ep_r, "steps": steps, "goal": s == fin}
