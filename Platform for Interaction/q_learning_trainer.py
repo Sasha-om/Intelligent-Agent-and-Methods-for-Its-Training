@@ -28,7 +28,10 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
-from qlearn.environment import DEFAULT_ENV, DIRS, GOAL_BONUS, GridEnv  # noqa: E402
+from qlearn import ui_text  # noqa: E402
+from qlearn.environment import DEFAULT_ENV, DIRS, GOAL_BONUS, GridEnv  # noqa: E402,F401 (GOAL_BONUS — для сумісності)
+from qlearn.factory import MODES, dqn_available, make_agent  # noqa: E402
+from qlearn.stepper import EpisodeStepper  # noqa: E402
 from qlearn.tabular import TabularAgent  # noqa: E402
 
 # ---------------------------------------------------------------- середовище
@@ -102,26 +105,30 @@ def _env_field(name, doc):
     return property(get, set_, doc=doc)
 
 
-def _agent_field(name, doc):
-    def get(self):
-        return getattr(self.agent, name)
-
-    def set_(self, value):
-        setattr(self.agent, name, value)
-    return property(get, set_, doc=doc)
-
-
 class QModel:
-    """Фасад для інтерфейсу: середовище (qlearn.GridEnv) + агент (qlearn.TabularAgent).
+    """Фасад для інтерфейсу: середовище (qlearn.GridEnv) + агент (таблиця або DQN, режим — self.mode).
 
-    Зберігає колишній API QModel, тож App не змінювався. Стани — цілі i = r*cols + c,
+    Зберігає колишній API QModel, тож App майже не змінювався. Стани — цілі i = r*cols + c,
     таблиця Q — плаский список q[i*4 + slot], slot — номер дії в DIRS.
     Редактор змінює cols/rows/obstacles/rough/start/finish напряму й потім викликає rebuild().
     """
 
     def __init__(self):
         self.env = GridEnv(DEFAULT_ENV)
+        self.mode = "tabular"
+        # спільні параметри живуть тут: при перемиканні режиму новий агент отримує ті самі значення
+        self._alpha, self._gamma, self._epsilon = 0.35, 0.9, 0.12
         self.agent = TabularAgent(self.env)
+
+    def set_mode(self, mode):
+        """Перемкнути режим: новий агент (навчання з нуля) на тій самій карті з тими самими γ і ε."""
+        if mode not in MODES:
+            raise ValueError(f"невідомий режим: {mode!r}")
+        params = {"gamma": self._gamma, "epsilon": self._epsilon}
+        if mode == "tabular":
+            params["alpha"] = self._alpha
+        self.agent = make_agent(mode, self.env, **params)
+        self.mode = mode
 
     # ---- поля середовища (читання й запис ідуть у self.env)
     cols = _env_field("cols", "кількість стовпців")
@@ -131,10 +138,21 @@ class QModel:
     start = _env_field("start", "клітинка старту")
     finish = _env_field("finish", "клітинка фінішу")
 
-    # ---- параметри навчання (повзунки змінюють їх напряму)
-    alpha = _agent_field("alpha", "швидкість навчання α")
-    gamma = _agent_field("gamma", "дисконтування γ")
-    epsilon = _agent_field("epsilon", "дослідження ε")
+    # ---- параметри навчання (повзунки змінюють їх напряму; α — лише для таблиці)
+    def _shared(name, doc):
+        def get(self):
+            return getattr(self, "_" + name)
+
+        def set_(self, value):
+            setattr(self, "_" + name, value)
+            if hasattr(self.agent, name):
+                setattr(self.agent, name, value)
+        return property(get, set_, doc=doc)
+
+    alpha = _shared("alpha", "швидкість навчання α (таблиця)")
+    gamma = _shared("gamma", "дисконтування γ")
+    epsilon = _shared("epsilon", "дослідження ε")
+    del _shared
 
     # ---- похідні дані (лише читання)
     @property
@@ -447,6 +465,8 @@ class App:
         self.episode = WARM
         self.state = self.m.start_i
         self.set_status("paused")
+        self.stepper = EpisodeStepper(self.m.agent)
+        self._apply_mode_texts()
         self.render()
         # елементи, що залежать від ширини, перемальовуються після розкладки вікна
         self._relayout_id = None
@@ -521,9 +541,9 @@ class App:
         titles.pack(side="left")
         tk.Label(titles, text="Q-навчання у вільному середовищі з перешкодами", bg=BG, fg=TEXT,
                  font=F(19, "bold")).pack(anchor="w")
-        tk.Label(titles, text="Табличне Q-навчання методом проб і помилок · шлях не заданий "
-                              "заздалегідь — агент прокладає його сам",
-                 bg=BG, fg=TEXT_DIM, font=F(12.5)).pack(anchor="w", pady=(4, 0))
+        self.subtitle_label = tk.Label(titles, text=ui_text.ui_texts("tabular")["subtitle"],
+                                       bg=BG, fg=TEXT_DIM, font=F(12.5))
+        self.subtitle_label.pack(anchor="w", pady=(4, 0))
         badge = tk.Frame(head, bg=PANEL, highlightbackground=BORDER, highlightthickness=1,
                          padx=14, pady=6)
         badge.pack(side="right", anchor="n")
@@ -628,7 +648,8 @@ class App:
                  pady=(0, 14) if row == 0 else 0)
         top = tk.Frame(box, bg=PANEL)
         top.pack(fill="x")
-        tk.Label(top, text=label, bg=PANEL, fg=TEXT_DIM, font=F(12)).pack(side="left")
+        title = tk.Label(top, text=label, bg=PANEL, fg=TEXT_DIM, font=F(12))
+        title.pack(side="left")
         val = tk.Label(top, text=fmt(value), bg=PANEL, fg=TEXT_DIM, font=F(12, mono=True))
         val.pack(side="right")
         var = tk.DoubleVar(value=value)
@@ -638,13 +659,31 @@ class App:
             val.config(text=fmt(v))
             on_change(v)
 
-        ttk.Scale(box, from_=frm, to=to, variable=var, command=changed,
-                  style="Dark.Horizontal.TScale").pack(fill="x", pady=(6, 0))
+        scale = ttk.Scale(box, from_=frm, to=to, variable=var, command=changed,
+                          style="Dark.Horizontal.TScale")
+        scale.pack(fill="x", pady=(6, 0))
+        self.slider_parts[label] = (title, val, scale, fmt)
         return var, changed
 
     def _build_params(self, parent):
         p = Panel(parent, "Параметри навчання")
         p.pack(fill="x", pady=(16, 0))
+        # перемикач режиму «Таблиця / Нейромережа» (етап 6)
+        mode_row = self.mode_row = tk.Frame(p, bg=PANEL)
+        mode_row.pack(fill="x", pady=(0, 6))
+        tk.Label(mode_row, text="Режим", bg=PANEL, fg=TEXT_DIM, font=F(12)).pack(side="left")
+        self.mode_btns = {}
+        for mode in reversed(MODES):
+            b = FlatButton(mode_row, ui_text.MODE_LABELS[mode], lambda md=mode: self.set_mode(md),
+                           font=F(12, "bold"), pady=6)
+            b.config(padx=14)
+            b.pack(side="right", padx=(8, 0))
+            self.mode_btns[mode] = b
+        self.mode_hint = tk.Label(p, text="", bg=PANEL, fg=TEXT_FAINT, font=F(11.5), justify="left",
+                                  anchor="w", wraplength=350)
+        self.mode_hint.pack(fill="x", pady=(0, 8))
+        auto_wrap(self.mode_hint)
+        self.slider_parts = {}
         grid = tk.Frame(p, bg=PANEL)
         grid.pack(fill="x")
         grid.columnconfigure(0, weight=1, uniform="g")
@@ -761,8 +800,9 @@ class App:
         p.pack(fill="x", pady=(18, 0))
         head = tk.Frame(p, bg=PANEL)
         head.pack(fill="x")
-        tk.Label(head, text="ТАБЛИЦЯ Q-ЗНАЧЕНЬ Q(S, A)", bg=PANEL, fg=TEXT_DIM,
-                 font=F(12, "bold")).pack(side="left")
+        self.q_title_label = tk.Label(head, text=ui_text.ui_texts("tabular")["q_title"], bg=PANEL,
+                                      fg=TEXT_DIM, font=F(12, "bold"))
+        self.q_title_label.pack(side="left")
         acts = tk.Frame(head, bg=PANEL)
         acts.pack(side="right")
         self.btn_toggle_q = FlatButton(acts, "Показати таблицю", self.toggle_q,
@@ -931,11 +971,13 @@ class App:
     def _fast_loop(self):
         if not (self.running and self.fast):
             return
-        t0 = time.perf_counter()
-        run = self.m.run_episode_silent
-        while time.perf_counter() - t0 < 0.025 and self.episode < self.max_episodes:
-            self._push_history(run())
+        # порція ~25 мс: таблиця — цілими епізодами (як раніше), DQN — окремими кроками (qlearn/stepper.py)
+        st = self.stepper
+        st.state, st.steps, st.ep_reward = self.state, self.steps, self.ep_reward
+        for reward in st.train_for(0.025, self.max_episodes - self.episode):
+            self._push_history(reward)
             self.episode += 1
+        self.state, self.steps, self.ep_reward = st.state, st.steps, st.ep_reward
         # перемальовуємо не частіше ніж 4 рази на секунду, решту часу — навчання
         now = time.perf_counter()
         if now - self._last_draw > 0.25 or self.episode >= self.max_episodes:
@@ -972,6 +1014,43 @@ class App:
         self._reset_calc()
         self.set_status("paused")
         self.render()
+
+    def set_mode(self, mode):
+        """Кнопки «Таблиця / Нейромережа»: зупинити навчання, новий агент, скинути прогрес (FR-N1, FR-N2)."""
+        if mode == self.m.mode or (mode == "dqn" and not dqn_available()):
+            return
+        self.pause_run()
+        self.m.set_mode(mode)
+        self.stepper = EpisodeStepper(self.m.agent)
+        self._apply_mode_texts()
+        self.reset_all()
+
+    def _apply_mode_texts(self):
+        """Підписи, стан кнопок і повзунка α відповідно до режиму (FR-N6)."""
+        mode, texts, dqn_ok = self.m.mode, ui_text.ui_texts(self.m.mode), dqn_available()
+        self.subtitle_label.config(text=texts["subtitle"])
+        self.q_title_label.config(text=texts["q_title"])
+        for md, b in self.mode_btns.items():
+            b.set_active(md == mode)
+        self.mode_btns["dqn"].set_enabled(dqn_ok)
+        hint = ui_text.mode_hint(mode, self.m.cols, self.m.rows, dqn_ok)
+        self.mode_hint.config(text=hint)
+        if hint:
+            self.mode_hint.pack(fill="x", pady=(0, 8), after=self.mode_row)
+        else:
+            self.mode_hint.pack_forget()
+        title, val, scale, fmt = self.slider_parts["Швидкість навчання, α"]
+        title.config(text=texts["alpha_label"])
+        if mode == "dqn":
+            # lr мережі (0.001) не вкладається в шкалу 0…1 — повзунок вимкнено й притушено;
+            # параметри мережі налаштовуються окремою панеллю на етапі 7
+            scale.state(["disabled"])
+            title.config(fg=TEXT_FAINT)
+            val.config(text=f"{self.m.agent.params()['lr']:g}", fg=TEXT_FAINT)
+        else:
+            scale.state(["!disabled"])
+            title.config(fg=TEXT_DIM)
+            val.config(text=fmt(self.m.alpha), fg=TEXT_DIM)
 
     def set_status(self, kind):
         self.status_kind = kind
@@ -1016,6 +1095,7 @@ class App:
             self.build_grid()
         else:
             self.redraw_cells(cells)
+        self._apply_mode_texts()
         self.reset_all()
 
     def on_dims(self, _=None):
@@ -1211,13 +1291,9 @@ class App:
 
         t = self.last_transition
         if t:
-            (fx, fy), (tx, ty) = m.cell_of(t["frm"]), m.cell_of(t["to"])
-            bonus = f", бонус за фініш +{GOAL_BONUS}" if t["goal"] else ""
-            self.calc_label.config(text=(
-                f"крок {t['step_no']} · клітинка ({fx},{fy}) → дія: {t['dir']} → ({tx},{ty})\n"
-                f"r = {signed(t['reward'], 2)}  (вартість переходу {t['cost']}{bonus})\n"
-                f"Q(s,a) ← Q + α·[ r + γ·maxQ(s′,·) − Q ]"))
-            self.delta_label.config(text=f"{t['old_q']:.2f} → {t['new_q']:.2f}")
+            main, delta = ui_text.calc_text(t, m.cell_of, m.mode)
+            self.calc_label.config(text=main)
+            self.delta_label.config(text=delta)
             if not self.delta_label.winfo_ismapped():
                 self.delta_label.pack(fill="x")
 
@@ -1337,7 +1413,7 @@ class App:
             return [cid(p) for p in sorted(cells, key=lambda p: (p[1], p[0]))]
 
         created = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
-        return {
+        data = {
             "created": created,
             "params": {"alpha": m.alpha, "gamma": m.gamma, "epsilon": m.epsilon,
                        "episode": self.episode, "maxEpisodes": self.max_episodes},
@@ -1349,6 +1425,10 @@ class App:
                       for r in m.q_table_data()],
             "greedyPath": [cid(m.cell_of(i)) for i in m.greedy_path()],
         }
+        if getattr(m, "mode", "tabular") != "tabular":     # FR-N7; табличний експорт лишається як був
+            data["mode"] = m.mode
+            data["agentParams"] = m.agent.params()
+        return data
 
     def export_csv(self):
         path = filedialog.asksaveasfilename(
