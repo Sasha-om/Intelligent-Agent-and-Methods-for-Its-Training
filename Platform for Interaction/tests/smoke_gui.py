@@ -72,26 +72,42 @@ def test_mode_switch_roundtrip(app):
     assert app.errors == []
 
 
-def test_fast_mode_stays_responsive_with_dqn(app):
-    """«Швидке навчання» в DQN не «заморожує» вікно (NFR-2): навчання йде порціями ~25 мс.
+def idle_gaps(app, seconds):
+    """Як часто вікно встигає перемалюватися: проміжки між «вільними» моментами tkinter.
 
-    Поодинокі паузи 0.1–0.5 с можливі (потоки PyTorch конкурують за процесор, INS-013),
-    тому перевіряємо: 95 % оновлень коротші за 100 мс і жодне не довше за 1 с.
+    tkinter перемальовує вікно в idle-обробниках, тобто коли немає інших подій. Проба кожні 10 мс
+    ставить свій idle-обробник і записує час, коли він спрацював. Великий проміжок між записами
+    означає, що стільки часу вікно не могло перемалюватися («зависло»).
+    Тривалість одного root.update() для цього НЕ годиться: він може виконати поспіль багато
+    порцій навчання, а між ними вікно все одно перемальовується (INS-013).
+    Повертає (95-й перцентиль, найбільший проміжок) у секундах.
     """
+    stamps = []
+    alive = [True]
+
+    def probe():
+        if alive[0]:
+            app.root.after_idle(lambda: stamps.append(time.perf_counter()))
+            app.root.after(10, probe)
+
+    probe()
+    pump(app, seconds)
+    alive[0] = False
+    gaps = sorted(b - a for a, b in zip(stamps, stamps[1:]))
+    return gaps[int(len(gaps) * 0.95)], gaps[-1]
+
+
+def test_fast_mode_stays_responsive_with_dqn(app):
+    """«Швидке навчання» в DQN не «заморожує» вікно (NFR-2): навчання йде порціями ~25 мс,
+    і між порціями вікно перемальовується. 95 % проміжків < 100 мс, найдовший < 0,5 с."""
     pytest.importorskip("torch")
     app.set_mode("dqn")
     app.start_fast()
-    times = []
-    end = time.perf_counter() + 1.5
-    while time.perf_counter() < end:
-        t0 = time.perf_counter()
-        app.root.update()
-        times.append(time.perf_counter() - t0)
+    p95, worst = idle_gaps(app, 1.5)
     app.pause_run()
-    times.sort()
-    p95, worst = times[int(len(times) * 0.95)], times[-1]
-    assert p95 < 0.1, f"95-й перцентиль оновлення вікна {p95 * 1000:.0f} мс"
-    assert worst < 1.0, f"вікно не відповідало {worst:.2f} с"
+    assert app.episode > 0, "навчання не йшло"
+    assert p95 < 0.1, f"95-й перцентиль проміжку між перемальовуваннями {p95 * 1000:.0f} мс"
+    assert worst < 0.5, f"вікно не перемальовувалося {worst:.2f} с"
     assert app.errors == []
 
 
