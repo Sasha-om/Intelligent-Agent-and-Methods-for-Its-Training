@@ -840,13 +840,15 @@ class App:
         self.path_line = self.cv.create_line(0, 0, 0, 0, fill=blend(PANEL, ACCENT, .85),
                                              width=2.5 if big else 2.5 * s, capstyle="round",
                                              joinstyle="round", state="hidden")
+        # рухомі елементи — з цілою товщиною й цілими координатами: з дробовими Windows лишає
+        # після руху «сині смужки» (INS-015)
         self.hover_item = self.cv.create_rectangle(0, 0, 0, 0, outline=AGENT,
-                                                   width=2 if big else 2 * s, state="hidden")
+                                                   width=2 if big else round(2 * s), state="hidden")
         dash = max(2, round(4 * (1 if big else s)))
-        self.halo = self.cv.create_oval(0, 0, 0, 0, outline=AGENT, width=2.5 if big else 2.5 * s,
+        self.halo = self.cv.create_oval(0, 0, 0, 0, outline=AGENT, width=2 if big else round(2.5 * s),
                                         dash=(dash, dash))
         self.agent_item = self.cv.create_oval(0, 0, 0, 0, fill=AGENT, outline=BG,
-                                              width=2 if big else 2 * s)
+                                              width=2 if big else round(2 * s))
 
     def _draw_cell(self, c, r):
         m, s, cv = self.m, self.s, self.cv
@@ -986,6 +988,12 @@ class App:
         if self.episode >= self.max_episodes:
             self.stop_run("done")
         else:
+            # наступна порція — лише ПІСЛЯ idle-подій: tkinter спершу перемальовує вікно й обробляє
+            # мишу, а вже потім навчає далі. Без цього вікно «смикається» (INS-015).
+            self.after_id = self.root.after_idle(self._schedule_fast)
+
+    def _schedule_fast(self):
+        if self.running and self.fast:
             self.after_id = self.root.after(1, self._fast_loop)
 
     def _cancel(self):
@@ -1145,7 +1153,7 @@ class App:
         c, r = cell
         s = self.s
         x, y = (PAD + c * CELL + 2) * s, (PAD + r * CELL + 2) * s
-        self.cv.coords(self.hover_item, x, y, x + (CELL - 4) * s, y + (CELL - 4) * s)
+        self.cv.coords(self.hover_item, round(x), round(y), round(x + (CELL - 4) * s), round(y + (CELL - 4) * s))
         self.cv.itemconfig(self.hover_item, state="normal")
 
     def on_press(self, e):
@@ -1286,8 +1294,8 @@ class App:
         cv.tag_lower("dot", self.hover_item)
         x, y = self.center(self.state)
         h, a = (9, 4) if big else (19 * s, 7 * s)
-        cv.coords(self.halo, x - h, y - h, x + h, y + h)
-        cv.coords(self.agent_item, x - a, y - a, x + a, y + a)
+        cv.coords(self.halo, round(x - h), round(y - h), round(x + h), round(y + h))
+        cv.coords(self.agent_item, round(x - a), round(y - a), round(x + a), round(y + a))
 
         t = self.last_transition
         if t:

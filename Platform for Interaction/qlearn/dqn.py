@@ -52,9 +52,13 @@ def torch_available():
 def _torch():
     try:
         import torch
-        return torch
     except Exception as exc:
         raise DQNUnavailable(TORCH_HINT) from exc
+    # Мережа крихітна (2×64, батч 32): кілька потоків лише чекають один одного й забирають процесор
+    # у вікна. В одному потоці крок швидший, а вікно не «смикається» (INS-015).
+    if torch.get_num_threads() != 1:
+        torch.set_num_threads(1)
+    return torch
 
 
 def masked_argmax(q_row, mask):

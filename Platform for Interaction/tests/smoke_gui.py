@@ -165,3 +165,44 @@ def test_fast_mode_pause_mid_episode_keeps_position(app):
     assert app.stepper.steps > 0, "не вдалося зупинитись посеред епізоду"
     assert (app.state, app.steps, app.ep_reward) == (app.stepper.state, app.stepper.steps, app.stepper.ep_reward)
     assert app.errors == []
+
+
+def test_moving_items_have_whole_pixel_geometry(app):
+    """Синя рамка під курсором, ореол і агент мають цілі координати й товщину ліній.
+    З дробовими (масштаб s ≈ 1.63) Windows лишає на полотні «сині смужки» після руху рамки (INS-015)."""
+    cv = app.cv
+    assert app.s != int(app.s)                       # масштаб справді дробовий — перевірка має сенс
+    for k in range(12):
+        cv.event_generate("<Motion>", x=17 + k * 37, y=23 + k * 29)
+        app.root.update()
+        app.step()
+        for item in (app.hover_item, app.halo, app.agent_item):
+            assert all(v == int(v) for v in cv.coords(item)), cv.coords(item)
+            assert float(cv.itemcget(item, "width")).is_integer()
+    assert app.errors == []
+
+
+def test_window_redraws_between_fast_portions(app):
+    """Між двома порціями «Швидкого навчання» tkinter обов'язково встигає обробити idle-події
+    (перемальовування вікна). Інакше вікно «смикається» (INS-015)."""
+    pytest.importorskip("torch")
+    app.set_mode("dqn")
+    st = app.stepper
+    orig = st.train_for
+    flag = {"idle": True}
+    missed = []
+
+    def train_for(*a, **kw):
+        missed.append(not flag["idle"])
+        res = orig(*a, **kw)
+        flag["idle"] = False
+        app.root.after_idle(lambda: flag.update(idle=True))
+        return res
+
+    st.train_for = train_for
+    app.start_fast()
+    pump(app, 1.0)
+    app.pause_run()
+    assert len(missed) > 5, "порцій навчання замало"
+    assert not any(missed), f"без перемальовування між порціями: {sum(missed)} з {len(missed)}"
+    assert app.errors == []
