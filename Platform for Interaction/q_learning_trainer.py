@@ -13,6 +13,7 @@
 """
 
 import json
+import math
 import os
 import random
 import sys
@@ -28,9 +29,12 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
-from qlearn import ui_params, ui_text  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+from qlearn import compare_view, ui_params, ui_text  # noqa: E402
+from qlearn.comparison import ROW_FIELDS, compare, write_csv  # noqa: E402
 from qlearn.dqn import DEFAULT_PARAMS as DQN_DEFAULTS  # noqa: E402 (torch тут не імпортується)
-from qlearn.recording import RESULTS_DIR, RunRecorder, save_run  # noqa: E402
+from qlearn.recording import RESULTS_DIR, RunRecorder, list_runs, load_run, save_run  # noqa: E402
 from qlearn.environment import DEFAULT_ENV, DIRS, GOAL_BONUS, GridEnv  # noqa: E402,F401 (GOAL_BONUS — для сумісності)
 from qlearn.factory import MODES, dqn_available, make_agent  # noqa: E402
 from qlearn.stepper import EpisodeStepper  # noqa: E402
@@ -289,6 +293,20 @@ class QModel:
 
 
 # ============================================================ віджети
+def setup_styles(master):
+    """Темні стилі ttk (повзунки, смуги прокрутки) — для головного вікна й вікна порівняння."""
+    st = ttk.Style(master)
+    st.theme_use("clam")
+    st.configure("Dark.Horizontal.TScale", background=ACCENT, troughcolor=LINE,
+                 bordercolor=PANEL, lightcolor=ACCENT, darkcolor=ACCENT, gripcount=0,
+                 sliderlength=16, sliderthickness=14, troughrelief="flat", borderwidth=0)
+    st.map("Dark.Horizontal.TScale", background=[("active", "#f6c08f")])
+    st.configure("Dark.Vertical.TScrollbar", background=BORDER, troughcolor=PANEL2,
+                 bordercolor=PANEL2, arrowcolor=TEXT_DIM, lightcolor=BORDER,
+                 darkcolor=BORDER)
+    st.map("Dark.Vertical.TScrollbar", background=[("active", HATCH)])
+
+
 class FlatButton(tk.Label):
     """Пласка кнопка в стилі HTML-версії (звичайна / основна / інструмент)."""
 
@@ -511,16 +529,7 @@ class App:
 
     # ======================================================== побудова UI
     def _styles(self):
-        st = ttk.Style(self.root)
-        st.theme_use("clam")
-        st.configure("Dark.Horizontal.TScale", background=ACCENT, troughcolor=LINE,
-                     bordercolor=PANEL, lightcolor=ACCENT, darkcolor=ACCENT, gripcount=0,
-                     sliderlength=16, sliderthickness=14, troughrelief="flat", borderwidth=0)
-        st.map("Dark.Horizontal.TScale", background=[("active", "#f6c08f")])
-        st.configure("Dark.Vertical.TScrollbar", background=BORDER, troughcolor=PANEL2,
-                     bordercolor=PANEL2, arrowcolor=TEXT_DIM, lightcolor=BORDER,
-                     darkcolor=BORDER)
-        st.map("Dark.Vertical.TScrollbar", background=[("active", HATCH)])
+        setup_styles(self.root)
 
     def _build_page(self):
         # уся сторінка прокручується, як у браузері
@@ -763,12 +772,17 @@ class App:
         save = tk.Frame(p, bg=PANEL)
         save.pack(fill="x", pady=(8, 0))
         self.btn_save = FlatButton(save, "Зберегти результат…", self.on_save_click)
+        self.btn_save.config(padx=14)
         self.btn_save.pack(side="left")
         self.autosave_var = tk.BooleanVar(value=False)
         tk.Checkbutton(save, text="Автозбереження після завершення", variable=self.autosave_var,
                        bg=PANEL, fg=TEXT_DIM, activebackground=PANEL, activeforeground=TEXT,
                        selectcolor=PANEL2, highlightthickness=0, bd=0, font=F(11.5)
                        ).pack(side="left", padx=(12, 0))
+        # порівняння збережених запусків (етап 8) — окреме вікно
+        self.btn_compare = FlatButton(p, "Порівняти результати…", self.open_compare)
+        self.btn_compare.pack(fill="x", pady=(8, 0))
+        self.compare_win = None
         self.save_label = tk.Label(p, text="", bg=PANEL, fg=TEXT_FAINT, font=F(11.5), justify="left",
                                    anchor="w")
         self.save_label.pack(fill="x", pady=(6, 0))
@@ -1194,6 +1208,16 @@ class App:
         self._saved_episodes = len(self.recorder.rewards)
         self.save_label.config(text=f"Збережено: {path.name}", fg=TEXT_FAINT)
         return path
+
+    def open_compare(self):
+        """Кнопка «Порівняти результати…»: відкрити вікно порівняння (або підняти вже відкрите й оновити)."""
+        win = self.compare_win
+        if win is not None and win.winfo_exists():
+            win.refresh()
+            win.lift()
+            win.focus_set()
+            return
+        self.compare_win = CompareWindow(self.root, folder=self.results_dir)
 
     def on_save_click(self):
         """Кнопка «Зберегти результат…»: запитати підпис і зберегти."""
@@ -1665,12 +1689,369 @@ class App:
             w = self.root.winfo_containing(e.x_root, e.y_root)
         except (KeyError, tk.TclError):
             w = None
+        if w is not None and w.winfo_toplevel() is not self.root:
+            return                  # колесо над іншим вікном (порівняння) — сторінку головного вікна не чіпаємо
         while w is not None:
             handler = getattr(w, "_wheel", None)
             if handler and handler(e):
                 return
             w = getattr(w, "master", None)
         self.page_canvas.yview_scroll(int(-e.delta / 120) * 3, "units")
+
+
+# ================================================== вікно «Порівняння результатів»
+def nice_ticks(lo, hi, count=5):
+    """«Круглі» поділки осі між lo і hi (1, 2, 5 × 10^k)."""
+    if hi <= lo:
+        return [lo]
+    raw = (hi - lo) / max(1, count)
+    mag = 10 ** math.floor(math.log10(raw))
+    step = next(m * mag for m in (1, 2, 5, 10) if m * mag >= raw)
+    first = math.ceil(lo / step) * step
+    ticks, v = [], first
+    while v <= hi + step * 1e-9:
+        ticks.append(round(v, 10))
+        v += step
+    return ticks
+
+
+def tick_text(v):
+    return f"{v:.0f}" if abs(v) >= 100 or float(v).is_integer() else f"{v:.2f}".rstrip("0").rstrip(".")
+
+
+class CompareWindow(tk.Toplevel):
+    """Вікно «Порівняння результатів» (етап 8): збережені запуски з results/ — таблиця метрик і криві навчання.
+
+    Ліворуч — список запусків (кілька — з Ctrl/Shift). Праворуч — попередження, таблиця й графік.
+    Усі розрахунки — у qlearn.compare_view (без tkinter); тут лише малювання.
+    """
+    COL_WEIGHTS = [1.3, 0.55, 0.55, 0.8, 0.85, 0.85, 1.0, 1.05, 1.05, 0.75, 0.65, 1.8]
+    RH, HH, MAX_ROWS = 24, 30, 8
+
+    def __init__(self, master, folder=RESULTS_DIR):
+        super().__init__(master, bg=BG)
+        setup_styles(self)
+        self.title("Порівняння результатів")
+        sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
+        w, h = min(1320, sw - 40), min(860, sh - 100)
+        self.geometry(f"{w}x{h}")
+        self.minsize(min(980, w), min(600, h))
+        self.folder = Path(folder)
+        self.extra = []              # файли, додані кнопкою «Додати файл…» (не з папки results)
+        self.runs = []               # [(шлях, запуск)] — у порядку списку
+        self.metric = "reward"
+        self.smooth_var = tk.IntVar(value=20)
+        self.group_var = tk.BooleanVar(value=False)
+        self.table_rows = []
+        self._build()
+        self.refresh()
+        self.protocol("WM_DELETE_WINDOW", self.close)
+
+    # ------------------------------------------------------------ побудова
+    def _build(self):
+        body = tk.Frame(self, bg=BG, padx=16, pady=16)
+        body.pack(fill="both", expand=True)
+
+        left = tk.Frame(body, bg=PANEL, highlightbackground=BORDER, highlightthickness=1, padx=14, pady=14)
+        left.pack(side="left", fill="y")
+        tk.Label(left, text="ЗБЕРЕЖЕНІ ЗАПУСКИ", bg=PANEL, fg=TEXT_DIM, font=F(11.5, "bold")).pack(anchor="w")
+        tk.Label(left, text="Кілька — з Ctrl або Shift", bg=PANEL, fg=TEXT_FAINT, font=F(11)).pack(anchor="w")
+        box = tk.Frame(left, bg=PANEL)
+        box.pack(fill="both", expand=True, pady=(8, 8))
+        self.listbox = tk.Listbox(box, selectmode="extended", exportselection=False, width=44,
+                                  bg=PANEL2, fg=TEXT, selectbackground=TOOL_ACTIVE_BG, selectforeground=AGENT,
+                                  highlightthickness=1, highlightbackground=BORDER, highlightcolor=AGENT,
+                                  relief="flat", activestyle="none", font=F(12))
+        sb = ttk.Scrollbar(box, orient="vertical", command=self.listbox.yview, style="Dark.Vertical.TScrollbar")
+        self.listbox.configure(yscrollcommand=sb.set)
+        self.listbox.pack(side="left", fill="both", expand=True)
+        sb.pack(side="right", fill="y")
+        self.listbox.bind("<<ListboxSelect>>", lambda e: self.redraw())
+        btns = tk.Frame(left, bg=PANEL)
+        btns.pack(fill="x")
+        for text, cmd in (("Вибрати всі", self.select_all), ("Додати файл…", self.on_add_click),
+                          ("Оновити", self.refresh)):
+            b = FlatButton(btns, text, cmd, font=F(11.5, "bold"), pady=5)
+            b.config(padx=10)
+            b.pack(side="left", padx=(0, 6))
+        self.status = tk.Label(left, text="", bg=PANEL, fg=TEXT_FAINT, font=F(11), justify="left",
+                               anchor="w", wraplength=300)
+        self.status.pack(fill="x", pady=(8, 0))
+
+        right = tk.Frame(body, bg=BG)
+        right.pack(side="left", fill="both", expand=True, padx=(16, 0))
+        self.banner = tk.Label(right, text="", bg="#2a2316", fg=ACCENT, font=F(12), justify="left", anchor="w",
+                               padx=12, pady=8, highlightbackground="#6b4c26", highlightthickness=1)
+        auto_wrap(self.banner)
+        head = tk.Frame(right, bg=BG)
+        head.pack(fill="x", pady=(0, 8))
+        tk.Label(head, text="МЕТРИКИ ВИБРАНИХ ЗАПУСКІВ", bg=BG, fg=TEXT_DIM, font=F(11.5, "bold")).pack(side="left")
+        tk.Label(head, text="  «—» — немає значення (наприклад, не зійшовся)", bg=BG, fg=TEXT_FAINT,
+                 font=F(11)).pack(side="left")
+        exp = FlatButton(head, "Експорт CSV…", self.on_export_click, font=F(11.5, "bold"), pady=5)
+        exp.config(padx=10)
+        exp.pack(side="right")
+        self.head_row = head
+        self.table_box = tk.Frame(right, bg=PANEL, highlightbackground=BORDER, highlightthickness=1)
+        self.table_box.pack(fill="x")
+        self.table = tk.Canvas(self.table_box, bg=PANEL, highlightthickness=0, height=self.HH + self.RH)
+        self.table_sb = ttk.Scrollbar(self.table_box, orient="vertical", command=self.table.yview,
+                                      style="Dark.Vertical.TScrollbar")
+        self.table.configure(yscrollcommand=self.table_sb.set)
+        self.table.pack(side="left", fill="x", expand=True)
+        self.table.configure(yscrollincrement=self.RH)
+        self.table.bind("<Configure>", lambda e: self._draw_table())
+        self.table.bind("<MouseWheel>", lambda e: self.table.yview_scroll(int(-e.delta / 120), "units"))
+
+        ctl = tk.Frame(right, bg=BG)
+        ctl.pack(fill="x", pady=(12, 8))
+        self.metric_btns = {}
+        for key, text in compare_view.METRIC_BUTTONS.items():
+            b = FlatButton(ctl, text, lambda k=key: self.set_metric(k), font=F(11.5, "bold"), pady=5)
+            b.config(padx=10)
+            b.pack(side="left", padx=(0, 6))
+            self.metric_btns[key] = b
+        self.metric_btns[self.metric].set_active(True)
+        tk.Label(ctl, text="Згладжування", bg=BG, fg=TEXT_DIM, font=F(11.5)).pack(side="left", padx=(12, 4))
+        self.smooth_scale = ttk.Scale(ctl, from_=1, to=100, orient="horizontal", length=130,
+                                      value=self.smooth_var.get(), style="Dark.Horizontal.TScale",
+                                      command=self._on_smooth)
+        self.smooth_scale.pack(side="left")
+        self.smooth_label = tk.Label(ctl, textvariable=self.smooth_var, width=3, anchor="w", bg=BG, fg=TEXT,
+                                     font=F(11.5, mono=True))
+        self.smooth_label.pack(side="left", padx=(6, 0))
+        tk.Checkbutton(ctl, text="Групувати за seed (середнє ± σ)", variable=self.group_var,
+                       command=self.redraw, bg=BG, fg=TEXT_DIM, activebackground=BG, activeforeground=TEXT,
+                       selectcolor=PANEL2, highlightthickness=0, bd=0, font=F(11.5)).pack(side="left", padx=(12, 0))
+
+        self.chart = tk.Canvas(right, bg=PANEL2, highlightthickness=1, highlightbackground=BORDER)
+        self.chart.pack(fill="both", expand=True)
+        self.chart.bind("<Configure>", lambda e: self._draw_chart())
+
+    # --------------------------------------------------------------- дані
+    def _paths(self):
+        paths = list(list_runs(self.folder))
+        for p in self.extra:
+            if all(p.resolve() != q.resolve() for q in paths):
+                paths.append(p)
+        return paths
+
+    def refresh(self):
+        """Перечитати папку results/ (і додані файли); вибір за шляхом файлу зберігається."""
+        chosen = {str(p) for p, _r in self.selected_items()}
+        self.runs, bad = [], []
+        for path in self._paths():
+            try:
+                self.runs.append((path, load_run(path)))
+            except (ValueError, OSError):
+                bad.append(path.name)
+        self.listbox.delete(0, "end")
+        for n, (path, run) in enumerate(self.runs):
+            self.listbox.insert("end", compare_view.list_label(run))
+            if str(path) in chosen:
+                self.listbox.selection_set(n)
+        if self.runs:
+            text = f"Запусків: {len(self.runs)} · папка {self.folder}"
+        else:
+            text = (f"Немає збережених запусків у {self.folder}. "
+                    "Збережіть запуск у головному вікні кнопкою «Зберегти результат…».")
+        if bad:
+            text += "\nПропущено (пошкоджені або іншого формату): " + ", ".join(bad)
+        self.status.config(text=text)
+        self.redraw()
+
+    def add_file(self, path):
+        """Додати запуск поза папкою results/ (кнопка «Додати файл…»)."""
+        path = Path(path)
+        if all(path.resolve() != p.resolve() for p in self.extra):
+            self.extra.append(path)
+        self.refresh()
+
+    def selected_items(self):
+        if not hasattr(self, "listbox"):
+            return []
+        return [self.runs[i] for i in self.listbox.curselection() if i < len(self.runs)]
+
+    def selected_runs(self):
+        return [run for _p, run in self.selected_items()]
+
+    def select_all(self):
+        self.listbox.selection_set(0, "end")
+        self.redraw()
+
+    def _on_smooth(self, value):
+        """Повзунок «Згладжування»: ціле вікно ковзного середнього 1…100."""
+        n = max(1, round(float(value)))
+        if n != self.smooth_var.get():
+            self.smooth_var.set(n)
+            self.redraw()
+
+    def set_metric(self, key):
+        self.metric = key
+        for k, b in self.metric_btns.items():
+            b.set_active(k == key)
+        self.redraw()
+
+    # -------------------------------------------------------- кнопки
+    def on_add_click(self):
+        for name in filedialog.askopenfilenames(parent=self, title="Додати запуск",
+                                                filetypes=[("Запуск (JSON)", "*.json"), ("Усі файли", "*.*")]):
+            self.add_file(name)
+
+    def export_csv(self, path):
+        """Таблиця вибраних (або всіх) запусків у CSV для Excel — той самий формат, що в runner (етап 5)."""
+        runs = self.selected_runs() or [r for _p, r in self.runs]
+        return write_csv(path, compare(runs)["rows"], ROW_FIELDS)
+
+    def on_export_click(self):
+        path = filedialog.asksaveasfilename(
+            parent=self, initialdir=str(self.folder) if self.folder.is_dir() else None,
+            initialfile=f"comparison-{datetime.now():%Y%m%d-%H%M%S}.csv", defaultextension=".csv",
+            filetypes=[("CSV (Excel)", "*.csv"), ("Усі файли", "*.*")])
+        if path:
+            self.export_csv(path)
+            messagebox.showinfo("Збережено", f"Порівняння збережено:\n{path}", parent=self)
+
+    def close(self):
+        self.destroy()
+
+    # ------------------------------------------------------- малювання
+    def redraw(self):
+        runs = self.selected_runs()
+        text = compare_view.mismatch_banner(runs)
+        self.banner.config(text=text)
+        if text:
+            self.banner.pack(fill="x", pady=(0, 10), before=self.head_row)
+        else:
+            self.banner.pack_forget()
+        self.colors = compare_view.assign_colors([r["run_id"] for r in runs])
+        if self.group_var.get():            # у групі всі запуски — кольором групи (як лінія на графіку)
+            for g in compare_view.group_series(runs, "success"):
+                for rid in g["run_ids"]:
+                    self.colors[rid] = self.colors[g["run_ids"][0]]
+        self.table_rows = compare_view.rows_for_view(runs)
+        self._draw_table()
+        self._draw_chart()
+
+    def _draw_table(self):
+        c, rows = self.table, self.table_rows
+        c.delete("all")
+        width = max(600, c.winfo_width())
+        total = sum(self.COL_WEIGHTS)
+        xs, x = [], 0.0
+        for wgt in self.COL_WEIGHTS:
+            xs.append((x, x + width * wgt / total))
+            x += width * wgt / total
+        c.create_rectangle(0, 0, width, self.HH, fill=PANEL2, outline="")
+        for (x0, _x1), (_key, title) in zip(xs, compare_view.TABLE_COLUMNS):
+            c.create_text(x0 + 8, self.HH / 2, text=title, anchor="w", fill=TEXT_DIM, font=F(10.5, "bold"))
+        runs = self.selected_runs()
+        if not rows:
+            c.create_text(12, self.HH + self.RH / 2, text="Оберіть один або кілька запусків ліворуч",
+                          anchor="w", fill=TEXT_FAINT, font=F(11.5))
+        for n, (row, run) in enumerate(zip(rows, runs)):
+            y0 = self.HH + n * self.RH
+            if n % 2:
+                c.create_rectangle(0, y0, width, y0 + self.RH, fill=blend(PANEL, PANEL2, 0.5), outline="")
+            color = self.colors.get(run["run_id"], TEXT)
+            c.create_rectangle(8, y0 + 8, 18, y0 + self.RH - 8, fill=color, outline="")
+            for k, ((x0, x1), text) in enumerate(zip(xs, row)):
+                tx = x0 + (22 if k == 0 else 8)
+                max_chars = max(4, int((x1 - tx) / 7))
+                if len(text) > max_chars:
+                    text = text[:max_chars - 1] + "…"
+                c.create_text(tx, y0 + self.RH / 2, text=text, anchor="w", fill=TEXT, font=F(11.5, mono=k > 2))
+        n_rows = max(1, len(rows))
+        h = self.HH + min(n_rows, self.MAX_ROWS) * self.RH
+        if int(c.cget("height")) != h:
+            c.config(height=h)
+        c.config(scrollregion=(0, 0, width, self.HH + n_rows * self.RH))
+        if n_rows > self.MAX_ROWS:
+            self.table_sb.pack(side="right", fill="y")
+        else:
+            self.table_sb.pack_forget()
+
+    def _series(self):
+        """Що малювати: [(підпис, колір, xs, ys, low, high)]; low/high — смуга ±σ або None."""
+        runs, window = self.selected_runs(), max(1, int(self.smooth_var.get()))
+        out = []
+        if self.group_var.get():
+            for g in compare_view.group_series(runs, self.metric, window):
+                color = self.colors.get(g["run_ids"][0], TEXT)
+                band = (g["low"], g["high"]) if g["n_runs"] > 1 else (None, None)
+                out.append((g["label"], color, g["xs"], g["mean"], *band))
+        else:
+            for run in runs:
+                xs, ys = compare_view.run_series(run, self.metric, window)
+                out.append((compare_view.run_label(run), self.colors.get(run["run_id"], TEXT), xs, ys, None, None))
+        return out
+
+    def _draw_chart(self):
+        c = self.chart
+        c.delete("all")
+        W, H = max(300, c.winfo_width()), max(200, c.winfo_height())
+        series = [s for s in self._series() if s[2]] if self.runs else []
+        title = compare_view.METRICS[self.metric]
+        window = int(self.smooth_var.get())
+        if window > 1:
+            title += f" · ковзне середнє за {window} {'епізоди' if 2 <= window % 10 <= 4 and not 12 <= window % 100 <= 14 else 'епізодів'}"
+        c.create_text(16, 14, text=title, anchor="nw", fill=TEXT_DIM, font=F(12, "bold"))
+        # легенда — праворуч від заголовка, переноситься на новий рядок
+        lx, ly = 16, 38
+        for label, color, *_rest in series:
+            w = 26 + len(label) * 7
+            if lx + w > W - 16:
+                lx, ly = 16, ly + 20
+            c.create_line(lx, ly + 7, lx + 18, ly + 7, fill=color, width=3, tags="legend")
+            c.create_text(lx + 24, ly + 7, text=label, anchor="w", fill=TEXT, font=F(11), tags="legend")
+            lx += w + 14
+        top = ly + 30
+        left, right, bottom = 62, W - 18, H - 38
+        if not series:
+            c.create_text(W / 2, (top + bottom) / 2, text="Оберіть запуски ліворуч — тут з'являться криві навчання",
+                          fill=TEXT_FAINT, font=F(12.5))
+            return
+        x_max = max(max(s[2]) for s in series)
+        x_min = min(min(s[2]) for s in series)
+        vals = [v for s in series for arr in (s[3], s[4], s[5]) if arr for v in arr]
+        y_lo, y_hi = min(vals), max(vals)
+        if self.metric in ("success", "optimal"):
+            y_lo, y_hi = min(0.0, y_lo), max(1.0, y_hi)
+        pad = (y_hi - y_lo) * 0.06 or 1.0
+        y_lo, y_hi = y_lo - pad, y_hi + pad
+        if x_max == x_min:
+            x_min, x_max = x_min - 1, x_max + 1
+
+        def sx(x):
+            return left + (x - x_min) / (x_max - x_min) * (right - left)
+
+        def sy(y):
+            return bottom - (y - y_lo) / (y_hi - y_lo) * (bottom - top)
+
+        for v in nice_ticks(y_lo, y_hi):
+            y = sy(v)
+            c.create_line(left, y, right, y, fill=LINE)
+            c.create_text(left - 8, y, text=tick_text(v), anchor="e", fill=TEXT_FAINT, font=F(10.5, mono=True))
+        for v in nice_ticks(x_min, x_max, 8):
+            x = sx(v)
+            c.create_line(x, bottom, x, bottom + 4, fill=BORDER)
+            c.create_text(x, bottom + 8, text=tick_text(v), anchor="n", fill=TEXT_FAINT, font=F(10.5, mono=True))
+        c.create_rectangle(left, top, right, bottom, outline=BORDER)
+        c.create_text((left + right) / 2, H - 6, text="Епізод", anchor="s", fill=TEXT_FAINT, font=F(11))
+        # спершу смуги ±σ (під лініями), потім лінії
+        for _label, color, xs, _ys, low, high in series:
+            if low is None or len(xs) < 2:
+                continue
+            pts = [(sx(x), sy(v)) for x, v in zip(xs, high)] + [(sx(x), sy(v)) for x, v in zip(reversed(xs), reversed(low))]
+            c.create_polygon([round(p, 1) for xy in pts for p in xy], fill=blend(PANEL2, color, 0.28),
+                             outline="", tags="band")
+        for _label, color, xs, ys, _low, _high in series:
+            if len(xs) == 1:
+                x, y = sx(xs[0]), sy(ys[0])
+                c.create_oval(x - 3, y - 3, x + 3, y + 3, fill=color, outline="", tags="series")
+            else:
+                c.create_line([round(p, 1) for x, y in zip(xs, ys) for p in (sx(x), sy(y))],
+                              fill=color, width=2, tags="series")
 
 
 def main():

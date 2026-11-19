@@ -37,8 +37,10 @@ def compare(runs):
     warnings = []
     maps = {(r["env"]["fingerprint"], _map_label(r)) for r in runs}
     if len(maps) > 1:
-        labels = ", ".join(sorted(label for _fp, label in maps))
-        warnings.append(f"Запуски на різних картах ({len(maps)}: {labels}) — порівнюйте метрики в межах однієї карти.")
+        sizes = sorted(label for _fp, label in maps)
+        same = " — розмір однаковий, але різні перешкоди, старт або фініш" if len(set(sizes)) < len(sizes) else ""
+        warnings.append(f"Запуски на різних картах ({len(maps)}: {', '.join(sizes)}{same}) — "
+                        "порівнюйте метрики в межах однієї карти.")
     gammas = sorted({r["gamma"] for r in runs})
     if len(gammas) > 1:
         warnings.append(f"Запуски з різними γ ({', '.join(str(g) for g in gammas)}) — оптимальні шляхи можуть відрізнятися (INS-008).")
