@@ -95,6 +95,7 @@ class DQNAgent(Agent):
     def reset(self):
         """Нова мережа, порожній буфер. Ваги мережі залежать від random.seed — запуски відтворювані."""
         torch, env, cfg = self.torch, self.env, self.cfg
+        feature_size(env, cfg["features"])               # onehot на завеликій сітці → ValueError (до витрат пам'яті)
         torch.manual_seed(random.getrandbits(32))
         self.X = torch.tensor(all_features(env, cfg["features"]), dtype=torch.float32)
         self.M = torch.tensor([action_mask(env, i) for i in range(env.cols * env.rows)], dtype=torch.bool)

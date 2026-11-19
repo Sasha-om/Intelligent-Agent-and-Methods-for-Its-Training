@@ -206,3 +206,154 @@ def test_window_redraws_between_fast_portions(app):
     assert len(missed) > 5, "порцій навчання замало"
     assert not any(missed), f"без перемальовування між порціями: {sum(missed)} з {len(missed)}"
     assert app.errors == []
+
+
+# ============================================================ етап 7: параметри DQN, seed, збереження
+def run_to_done(app, episodes, seconds=20.0):
+    """Задати «Максимум епізодів», запустити «Швидке навчання» й дочекатися «Завершено»."""
+    app.max_ep_var.set(str(episodes))
+    app.on_max_ep()
+    app.start_fast()
+    end = time.perf_counter() + seconds
+    while app.status_kind != "done" and time.perf_counter() < end:
+        app.root.update()
+        time.sleep(0.002)
+    assert app.status_kind == "done", "навчання не завершилось вчасно"
+
+
+def test_dqn_panel_only_in_dqn_mode(app):
+    pytest.importorskip("torch")
+    app.root.update()
+    assert not app.dqn_panel.winfo_ismapped() and app.dqn_panel.winfo_manager() == ""
+    app.set_mode("dqn")
+    assert app.dqn_panel.winfo_manager() == "pack"
+    assert app.dqn_vars["lr"].get() == "0.001" and app.dqn_vars["features"].get() == "compact"
+    app.set_mode("tabular")
+    assert app.dqn_panel.winfo_manager() == ""
+
+
+def test_dqn_params_applied_after_reset(app):
+    pytest.importorskip("torch")
+    app.set_mode("dqn")
+    for key, value in {"lr": "0.0005", "hidden": "32", "batch": "16", "buffer": "800",
+                       "target_sync": "20"}.items():
+        app.dqn_vars[key].set(value)
+    app.reset_all()                                       # «Скинути»
+    p = app.m.agent.params()
+    assert (p["lr"], p["hidden"], p["batch"], p["buffer"], p["target_sync"]) == (0.0005, 32, 16, 800, 20)
+    assert app.stepper.agent is app.m.agent               # «Швидке навчання» вчить нового агента
+    assert app.slider_parts["Швидкість навчання, α"][1].cget("text") == "0.0005"   # підпис lr біля повзунка
+    assert app.dqn_error.cget("text") == ""
+    for _ in range(5):
+        app.step()
+    assert app.errors == []
+
+
+def test_bad_dqn_param_shows_error_and_keeps_previous(app):
+    pytest.importorskip("torch")
+    app.set_mode("dqn")
+    app.dqn_vars["hidden"].set("абв")
+    app.reset_all()
+    assert "нейронів" in app.dqn_error.cget("text").lower()
+    assert app.m.agent.params()["hidden"] == 64           # лишились попередні значення
+    app.dqn_vars["hidden"].set("64")
+    app.reset_all()
+    assert app.dqn_error.cget("text") == ""
+
+
+@pytest.mark.parametrize("mode", ["tabular", "dqn"])
+def test_seed_makes_run_reproducible(app, mode):
+    if mode == "dqn":
+        pytest.importorskip("torch")
+    app.set_mode(mode)
+    app.seed_var.set("11")
+
+    def run():
+        app.reset_all()
+        for _ in range(25):
+            app.step()
+        return list(app.m.q), app.state, app.episode
+
+    first = run()
+    random.random()                                       # «чужі» випадкові числа між запусками не заважають
+    assert run() == first
+    assert app.recorder.seed == 11
+
+
+def test_empty_seed_keeps_old_behaviour(app):
+    """Порожнє поле Seed — «Скинути» не чіпає генератор випадкових чисел (як до етапу 7)."""
+    random.seed(123)
+    state = random.getstate()
+    app.reset_all()
+    assert random.getstate() == state and app.recorder.seed is None
+
+
+def test_bad_seed_shows_message(app):
+    app.seed_var.set("-5")
+    app.reset_all()
+    assert "seed" in app.seed_msg.cget("text").lower() and app.recorder.seed is None
+
+
+def test_recorder_follows_episodes_and_sliders(app):
+    app.reset_all()
+    for _ in range(300):                                  # покроково, з анімаційним шляхом
+        app.step()
+    assert len(app.recorder.rewards) == app.episode > 0
+    var, changed = app.sliders["gamma"]
+    var.set(0.95)
+    changed()
+    assert app.recorder.finish()["settings"]["changed_during_run"] == ["gamma"]
+
+
+@pytest.mark.parametrize("mode, episodes", [("tabular", 30), ("dqn", 4)])
+def test_save_result(app, tmp_path, mode, episodes):
+    from qlearn.recording import load_run
+    if mode == "dqn":
+        pytest.importorskip("torch")
+    app.set_mode(mode)
+    app.results_dir = tmp_path
+    app.seed_var.set("3")
+    app.reset_all()
+    assert app.save_result("порожньо") is None            # ще немає жодного епізоду
+    run_to_done(app, episodes)
+    path = app.save_result("тест етапу 7")
+    data = load_run(path)
+    assert data["agent"] == mode and data["seed"] == 3 and data["note"] == "тест етапу 7"
+    assert data["summary"]["episodes"] == episodes == len(data["metrics"]["reward_per_episode"])
+    assert path.name in app.save_label.cget("text")
+    assert app.errors == []
+
+
+def test_autosave_after_done(app, tmp_path):
+    from qlearn.recording import list_runs
+    app.results_dir = tmp_path
+    app.autosave_var.set(True)
+    app.reset_all()
+    run_to_done(app, 20)
+    files = list_runs(tmp_path)
+    assert len(files) == 1 and files[0].name in app.save_label.cget("text")
+    app.step()                                             # «Крок» після завершення знову каже «Завершено»…
+    assert len(list_runs(tmp_path)) == 1                   # …але той самий запуск вдруге не зберігається
+    app.autosave_var.set(False)
+    app.reset_all()
+    run_to_done(app, 20)
+    assert len(list_runs(tmp_path)) == 1                   # вимкнено — не зберігає
+
+
+def test_loading_message_while_torch_imports(app, monkeypatch):
+    """Перше вмикання DQN ~1 с (ініціалізація PyTorch): тим часом під перемикачем — «Завантаження PyTorch…»;
+    повторні перемикання швидкі — без повідомлення."""
+    pytest.importorskip("torch")
+    seen = []
+    orig = app.m.set_mode
+
+    def set_mode(mode):
+        seen.append(app.mode_hint.cget("text"))
+        orig(mode)
+    monkeypatch.setattr(app.m, "set_mode", set_mode)
+    app.set_mode("dqn")
+    assert seen and "Завантаження PyTorch" in seen[0]
+    assert "Завантаження" not in app.mode_hint.cget("text")      # після завантаження підказка звичайна
+    app.set_mode("tabular")
+    app.set_mode("dqn")
+    assert "Завантаження PyTorch" not in seen[1]
