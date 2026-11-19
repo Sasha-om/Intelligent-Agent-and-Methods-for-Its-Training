@@ -20,7 +20,7 @@ import time
 import tkinter as tk
 from datetime import datetime, timezone
 from functools import lru_cache
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox, simpledialog, ttk
 
 # Пакет qlearn лежить поруч із цим файлом: додаємо папку до шляху імпорту,
 # щоб програма запускалась з будь-якої поточної папки (і в тестах).
@@ -28,7 +28,9 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
-from qlearn import ui_text  # noqa: E402
+from qlearn import ui_params, ui_text  # noqa: E402
+from qlearn.dqn import DEFAULT_PARAMS as DQN_DEFAULTS  # noqa: E402 (torch тут не імпортується)
+from qlearn.recording import RESULTS_DIR, RunRecorder, save_run  # noqa: E402
 from qlearn.environment import DEFAULT_ENV, DIRS, GOAL_BONUS, GridEnv  # noqa: E402,F401 (GOAL_BONUS — для сумісності)
 from qlearn.factory import MODES, dqn_available, make_agent  # noqa: E402
 from qlearn.stepper import EpisodeStepper  # noqa: E402
@@ -118,6 +120,7 @@ class QModel:
         self.mode = "tabular"
         # спільні параметри живуть тут: при перемиканні режиму новий агент отримує ті самі значення
         self._alpha, self._gamma, self._epsilon = 0.35, 0.9, 0.12
+        self.dqn_params = {}      # змінені користувачем параметри мережі (етап 7); решта — типові DQN
         self.agent = TabularAgent(self.env)
 
     def set_mode(self, mode):
@@ -127,8 +130,30 @@ class QModel:
         params = {"gamma": self._gamma, "epsilon": self._epsilon}
         if mode == "tabular":
             params["alpha"] = self._alpha
+        else:
+            params.update(self.dqn_params)
         self.agent = make_agent(mode, self.env, **params)
         self.mode = mode
+
+    def set_dqn_params(self, params):
+        """Нові параметри мережі (панель «Параметри нейромережі»). У режимі DQN — новий агент з ними;
+        у режимі таблиці — лише запам'ятати до перемикання."""
+        self.dqn_params.update(params)
+        if self.mode == "dqn":
+            self.set_mode("dqn")
+
+    def _reset_agent(self):
+        """Скинути агента після зміни карти. Вхід onehot на сітці > 900 клітинок неможливий —
+        тоді мережа переходить на compact; повертає повідомлення про це (або None)."""
+        try:
+            self.agent.reset()
+        except ValueError:
+            if self.mode != "dqn" or self.agent.params()["features"] != "onehot":
+                raise
+            self.dqn_params["features"] = "compact"
+            self.set_mode("dqn")
+            return "Сітка більша за 900 клітинок: вхід мережі змінено на compact"
+        return None
 
     # ---- поля середовища (читання й запис ідуть у self.env)
     cols = _env_field("cols", "кількість стовпців")
@@ -182,12 +207,13 @@ class QModel:
     # ---------------------------------------------------------- середовище
     def load_env(self, env):
         self.env.load(env)
-        self.agent.reset()
+        return self._reset_agent()
 
     def rebuild(self):
-        """Перебудова графа сусідів після зміни середовища; Q очищується."""
+        """Перебудова графа сусідів після зміни середовища; Q очищується.
+        Повертає повідомлення для користувача, якщо параметри мережі довелося змінити (інакше None)."""
         self.env.rebuild()
-        self.agent.reset()
+        return self._reset_agent()
 
     def reset_q(self):
         self.agent.reset()
@@ -466,6 +492,8 @@ class App:
         self.state = self.m.start_i
         self.set_status("paused")
         self.stepper = EpisodeStepper(self.m.agent)
+        self.results_dir = RESULTS_DIR      # куди «Зберегти результат» пише JSON (тести підміняють)
+        self._start_recording(seed=None)
         self._apply_mode_texts()
         self.render()
         # елементи, що залежать від ширини, перемальовуються після розкладки вікна
@@ -690,24 +718,35 @@ class App:
         grid.columnconfigure(1, weight=1, uniform="g")
         self.sliders = {
             "alpha": self._slider(grid, 0, 0, "Швидкість навчання, α", 0, 1, 0.01, 0.35,
-                                  lambda v: f"{v:.2f}", lambda v: setattr(self.m, "alpha", v)),
+                                  lambda v: f"{v:.2f}", lambda v: self._param_changed("alpha", v)),
             "gamma": self._slider(grid, 0, 1, "Дисконтування, γ", 0, 1, 0.01, 0.9,
-                                  lambda v: f"{v:.2f}", lambda v: setattr(self.m, "gamma", v)),
+                                  lambda v: f"{v:.2f}", lambda v: self._param_changed("gamma", v)),
             "eps": self._slider(grid, 1, 0, "Дослідження, ε", 0, 1, 0.01, 0.12,
-                                lambda v: f"{v:.2f}", lambda v: setattr(self.m, "epsilon", v)),
+                                lambda v: f"{v:.2f}", lambda v: self._param_changed("epsilon", v)),
             "speed": self._slider(grid, 1, 1, "Швидкість анімації", 1, 10, 1, 3,
                                   lambda v: f"×{int(v)}", lambda v: setattr(self, "speed", int(v))),
         }
+        self.sliders_grid = grid
+        self._build_dqn_panel(p)
         row = tk.Frame(p, bg=PANEL)
-        row.pack(fill="x", pady=(14, 14))
+        row.pack(fill="x", pady=(14, 0))
         tk.Label(row, text="Максимум епізодів", bg=PANEL, fg=TEXT_DIM, font=F(12)).pack(side="left")
         self.max_ep_var = tk.StringVar(value="600")
-        e = tk.Entry(row, textvariable=self.max_ep_var, width=9, justify="right", bg=PANEL2,
-                     fg=TEXT, insertbackground=TEXT, relief="flat", font=F(12.5, mono=True),
-                     highlightthickness=1, highlightbackground=BORDER, highlightcolor=AGENT)
+        e = self._entry(row, self.max_ep_var, 9)
         e.pack(side="right", ipady=4)
         e.bind("<Return>", self.on_max_ep)
         e.bind("<FocusOut>", self.on_max_ep)
+        # seed (етап 7): порожньо — як досі; число — «Скинути» робить запуск відтворюваним
+        row = tk.Frame(p, bg=PANEL)
+        row.pack(fill="x", pady=(10, 0))
+        tk.Label(row, text="Seed", bg=PANEL, fg=TEXT_DIM, font=F(12)).pack(side="left")
+        tk.Label(row, text="  порожньо — випадково; діє після «Скинути»", bg=PANEL, fg=TEXT_FAINT,
+                 font=F(11)).pack(side="left")
+        self.seed_var = tk.StringVar(value="")
+        self._entry(row, self.seed_var, 9).pack(side="right", ipady=4)
+        self.seed_msg = tk.Label(p, text="", bg=PANEL, fg=NEGATIVE, font=F(11.5), justify="left", anchor="w")
+        self.seed_row = row
+        tk.Frame(p, bg=PANEL, height=14).pack(fill="x")
 
         btns = tk.Frame(p, bg=PANEL)
         btns.pack(fill="x")
@@ -720,6 +759,74 @@ class App:
             btns.columnconfigure(k, weight=1, uniform="b")
         self.btn_fast = FlatButton(p, "Швидке навчання (без анімації)", self.start_fast)
         self.btn_fast.pack(fill="x", pady=(8, 0))
+        # збереження запуску (етап 7): results/<run_id>.json, схема v1 (qlearn/recording.py)
+        save = tk.Frame(p, bg=PANEL)
+        save.pack(fill="x", pady=(8, 0))
+        self.btn_save = FlatButton(save, "Зберегти результат…", self.on_save_click)
+        self.btn_save.pack(side="left")
+        self.autosave_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(save, text="Автозбереження після завершення", variable=self.autosave_var,
+                       bg=PANEL, fg=TEXT_DIM, activebackground=PANEL, activeforeground=TEXT,
+                       selectcolor=PANEL2, highlightthickness=0, bd=0, font=F(11.5)
+                       ).pack(side="left", padx=(12, 0))
+        self.save_label = tk.Label(p, text="", bg=PANEL, fg=TEXT_FAINT, font=F(11.5), justify="left",
+                                   anchor="w")
+        self.save_label.pack(fill="x", pady=(6, 0))
+        auto_wrap(self.save_label)
+
+    def _entry(self, parent, var, width):
+        """Поле введення в стилі тренажера."""
+        return tk.Entry(parent, textvariable=var, width=width, justify="right", bg=PANEL2,
+                        fg=TEXT, insertbackground=TEXT, relief="flat", font=F(12.5, mono=True),
+                        highlightthickness=1, highlightbackground=BORDER, highlightcolor=AGENT)
+
+    def _build_dqn_panel(self, parent):
+        """«Параметри нейромережі» — видно лише в режимі DQN (етап 7). Нові значення діють після «Скинути»."""
+        box = self.dqn_panel = tk.Frame(parent, bg=PANEL2, highlightbackground=BORDER,
+                                        highlightthickness=1, padx=12, pady=10)
+        head = tk.Frame(box, bg=PANEL2)
+        head.pack(fill="x")
+        tk.Label(head, text="Параметри нейромережі", bg=PANEL2, fg=TEXT, font=F(12.5, "bold")).pack(side="left")
+        tk.Label(head, text="діють після «Скинути»", bg=PANEL2, fg=TEXT_FAINT, font=F(11)).pack(side="right")
+        values = ui_params.dqn_fields(dict(DQN_DEFAULTS, **self.m.dqn_params))
+        self.dqn_vars = {k: tk.StringVar(value=values[k]) for k in ui_params.DQN_KEYS}
+        grid = tk.Frame(box, bg=PANEL2)
+        grid.pack(fill="x", pady=(8, 0))
+        grid.columnconfigure(0, weight=1, uniform="d")
+        grid.columnconfigure(1, weight=1, uniform="d")
+        for n, key in enumerate(k for k in ui_params.DQN_KEYS if k != "features"):
+            label, hint = ui_params.DQN_LABELS[key]
+            cell = tk.Frame(grid, bg=PANEL2)
+            cell.grid(row=n // 2, column=n % 2, sticky="ew", padx=(0, 14) if n % 2 == 0 else 0, pady=(0, 8))
+            top = tk.Frame(cell, bg=PANEL2)
+            top.pack(fill="x")
+            tk.Label(top, text=label, bg=PANEL2, fg=TEXT_DIM, font=F(11.5), anchor="w",
+                     justify="left", wraplength=150).pack(side="left")
+            self._entry(top, self.dqn_vars[key], 8).pack(side="right", ipady=2)
+            tk.Label(cell, text=hint, bg=PANEL2, fg=TEXT_FAINT, font=F(10.5), anchor="w").pack(fill="x")
+        # вхід мережі — дві кнопки, як перемикач режиму
+        feat = tk.Frame(grid, bg=PANEL2)
+        feat.grid(row=2, column=1, sticky="ew", pady=(0, 8))
+        label, hint = ui_params.DQN_LABELS["features"]
+        tk.Label(feat, text=label, bg=PANEL2, fg=TEXT_DIM, font=F(11.5), anchor="w").pack(fill="x")
+        btns = tk.Frame(feat, bg=PANEL2)
+        btns.pack(fill="x", pady=(2, 0))
+        self.feature_btns = {}
+        for kind in ui_params.FEATURE_KINDS:
+            b = FlatButton(btns, kind, lambda k=kind: self._set_features(k), font=F(11.5), pady=3)
+            b.config(padx=10)
+            b.pack(side="left", padx=(0, 6))
+            self.feature_btns[kind] = b
+        self._set_features(self.dqn_vars["features"].get())
+        tk.Label(box, text=hint, bg=PANEL2, fg=TEXT_FAINT, font=F(10.5), anchor="w").pack(fill="x")
+        self.dqn_error = tk.Label(box, text="", bg=PANEL2, fg=NEGATIVE, font=F(11.5), justify="left", anchor="w")
+        self.dqn_error.pack(fill="x")
+        auto_wrap(self.dqn_error)
+
+    def _set_features(self, kind):
+        self.dqn_vars["features"].set(kind)
+        for k, b in self.feature_btns.items():
+            b.set_active(k == kind)
 
     def _build_calc(self, parent):
         p = Panel(parent, "Обчислення на поточному кроці")
@@ -840,13 +947,15 @@ class App:
         self.path_line = self.cv.create_line(0, 0, 0, 0, fill=blend(PANEL, ACCENT, .85),
                                              width=2.5 if big else 2.5 * s, capstyle="round",
                                              joinstyle="round", state="hidden")
+        # рухомі елементи — з цілою товщиною й цілими координатами: з дробовими Windows лишає
+        # після руху «сині смужки» (INS-015)
         self.hover_item = self.cv.create_rectangle(0, 0, 0, 0, outline=AGENT,
-                                                   width=2 if big else 2 * s, state="hidden")
+                                                   width=2 if big else round(2 * s), state="hidden")
         dash = max(2, round(4 * (1 if big else s)))
-        self.halo = self.cv.create_oval(0, 0, 0, 0, outline=AGENT, width=2.5 if big else 2.5 * s,
+        self.halo = self.cv.create_oval(0, 0, 0, 0, outline=AGENT, width=2 if big else round(2.5 * s),
                                         dash=(dash, dash))
         self.agent_item = self.cv.create_oval(0, 0, 0, 0, fill=AGENT, outline=BG,
-                                              width=2 if big else 2 * s)
+                                              width=2 if big else round(2 * s))
 
     def _draw_cell(self, c, r):
         m, s, cv = self.m, self.s, self.cv
@@ -920,7 +1029,7 @@ class App:
             return
         res = self.m.apply_step(self.state)
         if res is None:
-            self.finish_episode()
+            self.finish_episode(goal=False)
             self.render()
             return
         self.last_transition = dict(res, frm=self.state, step_no=self.steps + 1)
@@ -928,10 +1037,11 @@ class App:
         self.steps += 1
         self.state = res["to"]
         if res["goal"] or self.steps >= self.m.step_cap():
-            self.finish_episode()
+            self.finish_episode(goal=res["goal"])
         self.render()
 
-    def finish_episode(self):
+    def finish_episode(self, goal=False):
+        self.recorder.on_episode({"reward": self.ep_reward, "steps": self.steps, "goal": goal})
         self._push_history(self.ep_reward)
         self.episode += 1
         self.state = self.m.start_i
@@ -974,8 +1084,10 @@ class App:
         # порція ~25 мс: таблиця — цілими епізодами (як раніше), DQN — окремими кроками (qlearn/stepper.py)
         st = self.stepper
         st.state, st.steps, st.ep_reward = self.state, self.steps, self.ep_reward
-        for reward in st.train_for(0.025, self.max_episodes - self.episode):
-            self._push_history(reward)
+        st.train_for(0.025, self.max_episodes - self.episode)
+        for result in st.last_results:
+            self.recorder.on_episode(result)
+            self._push_history(result["reward"])
             self.episode += 1
         self.state, self.steps, self.ep_reward = st.state, st.steps, st.ep_reward
         # перемальовуємо не частіше ніж 4 рази на секунду, решту часу — навчання
@@ -986,6 +1098,12 @@ class App:
         if self.episode >= self.max_episodes:
             self.stop_run("done")
         else:
+            # наступна порція — лише ПІСЛЯ idle-подій: tkinter спершу перемальовує вікно й обробляє
+            # мишу, а вже потім навчає далі. Без цього вікно «смикається» (INS-015).
+            self.after_id = self.root.after_idle(self._schedule_fast)
+
+    def _schedule_fast(self):
+        if self.running and self.fast:
             self.after_id = self.root.after(1, self._fast_loop)
 
     def _cancel(self):
@@ -1001,10 +1119,20 @@ class App:
     def stop_run(self, kind):
         self._cancel()
         self.set_status(kind)
+        # автозбереження (етап 7): один раз на завершений запуск
+        if (ui_params.autosave_decision(kind, self.autosave_var.get())
+                and self._saved_episodes != len(self.recorder.rewards)):
+            self.save_result("автозбереження")
 
     def reset_all(self):
         self.pause_run()
+        self._apply_dqn_fields()
+        seed = self._read_seed()
+        if seed is not None:
+            random.seed(seed)          # до скидання агента: від seed залежать і ваги мережі
         self.m.reset_q()
+        self.stepper = EpisodeStepper(self.m.agent)
+        self._start_recording(seed)
         self.state = self.m.start_i
         self.episode = 0
         self.steps = 0
@@ -1015,15 +1143,89 @@ class App:
         self.set_status("paused")
         self.render()
 
+    # ---------------------------------------------- етап 7: параметри, seed, запис
+    def _apply_dqn_fields(self):
+        """«Скинути» в режимі DQN: перенести значення з панелі «Параметри нейромережі» в агента.
+        Помилка в полі — повідомлення під панеллю, агент лишається з попередніми параметрами."""
+        if self.m.mode != "dqn":
+            return
+        fields = {k: v.get() for k, v in self.dqn_vars.items()}
+        params, errors = ui_params.parse_dqn_params(fields, self.m.cols * self.m.rows)
+        if errors:
+            self.dqn_error.config(text="Не застосовано, лишились попередні значення:\n• " + "\n• ".join(errors))
+            return
+        self.dqn_error.config(text="")
+        current = self.m.agent.params()
+        if any(current[k] != v for k, v in params.items()):
+            self.m.set_dqn_params(params)
+            self.slider_parts["Швидкість навчання, α"][1].config(text=f"{params['lr']:g}")   # lr біля повзунка
+
+    def _read_seed(self):
+        """Seed з поля; неправильне значення — повідомлення й запуск без фіксованого seed."""
+        try:
+            seed = ui_params.parse_seed(self.seed_var.get())
+        except ValueError as exc:
+            self.seed_msg.config(text=f"{exc}. Запуск — без фіксованого seed.")
+            self.seed_msg.pack(fill="x", pady=(4, 0), after=self.seed_row)
+            return None
+        self.seed_msg.pack_forget()
+        return seed
+
+    def _start_recording(self, seed):
+        """Новий запис метрик (qlearn.recording.RunRecorder) — після кожного «Скинути»."""
+        self.recorder = RunRecorder(self.m.env, self.m.agent, seed=seed)
+        self._saved_episodes = None
+
+    def _param_changed(self, name, value):
+        """Повзунок α/γ/ε. Якщо запуск уже йде — запис позначає зміну (settings.changed_during_run)."""
+        setattr(self.m, name, value)
+        if self.recorder.rewards:
+            self.recorder.note_change(name, value)
+        elif name == "gamma":
+            self._start_recording(self.recorder.seed)      # ще жодного епізоду — просто новий V*
+
+    def save_result(self, note=""):
+        """Зберегти поточний запуск у self.results_dir; повертає шлях або None (немає епізодів)."""
+        if not self.recorder.rewards:
+            self.save_label.config(text="Нема чого зберігати: ще не завершено жодного епізоду.", fg=NEGATIVE)
+            return None
+        self.recorder.note = note
+        path = save_run(self.recorder.finish(), self.results_dir)
+        self._saved_episodes = len(self.recorder.rewards)
+        self.save_label.config(text=f"Збережено: {path.name}", fg=TEXT_FAINT)
+        return path
+
+    def on_save_click(self):
+        """Кнопка «Зберегти результат…»: запитати підпис і зберегти."""
+        if not self.recorder.rewards:
+            self.save_result()
+            return
+        note = simpledialog.askstring(
+            "Зберегти результат",
+            f"Файл буде збережено в папку:\n{self.results_dir}\n\nПідпис (необов'язково):",
+            parent=self.root)
+        if note is not None:                # None — натиснули «Скасувати»
+            self.save_result(note.strip())
+
     def set_mode(self, mode):
         """Кнопки «Таблиця / Нейромережа»: зупинити навчання, новий агент, скинути прогрес (FR-N1, FR-N2)."""
         if mode == self.m.mode or (mode == "dqn" and not dqn_available()):
             return
         self.pause_run()
+        if mode == "dqn" and not self._dqn_warm():
+            # перше створення мережі (ініціалізація PyTorch) триває ~1 с — показати, що програма не зависла
+            self.mode_hint.config(text="Завантаження PyTorch…")
+            self.mode_hint.pack(fill="x", pady=(0, 8), after=self.mode_row)
+            self.root.update_idletasks()
         self.m.set_mode(mode)
-        self.stepper = EpisodeStepper(self.m.agent)
         self._apply_mode_texts()
         self.reset_all()
+
+    def _dqn_warm(self):
+        """Чи вже створювали DQN-агента в цьому запуску програми (тоді PyTorch готовий і перемикання швидке)."""
+        warm = getattr(self, "_dqn_was_created", False)
+        self._dqn_was_created = True
+        return warm
 
     def _apply_mode_texts(self):
         """Підписи, стан кнопок і повзунка α відповідно до режиму (FR-N6)."""
@@ -1039,6 +1241,10 @@ class App:
             self.mode_hint.pack(fill="x", pady=(0, 8), after=self.mode_row)
         else:
             self.mode_hint.pack_forget()
+        if mode == "dqn":
+            self.dqn_panel.pack(fill="x", pady=(14, 0), after=self.sliders_grid)
+        else:
+            self.dqn_panel.pack_forget()
         title, val, scale, fmt = self.slider_parts["Швидкість навчання, α"]
         title.config(text=texts["alpha_label"])
         if mode == "dqn":
@@ -1083,7 +1289,9 @@ class App:
     def env_changed(self, cells=None):
         """Єдина точка входу після зміни середовища. cells=None — повна перебудова."""
         m = self.m
-        m.rebuild()
+        notice = m.rebuild()
+        if notice:                          # onehot не підходить для такої сітки — мережа перейшла на compact
+            self._set_features("compact")
         self.env_ok = m.finish_reachable()
         if self.env_ok:
             self.warn.pack_forget()
@@ -1097,6 +1305,8 @@ class App:
             self.redraw_cells(cells)
         self._apply_mode_texts()
         self.reset_all()
+        if notice:
+            self.dqn_error.config(text=notice)
 
     def on_dims(self, _=None):
         try:
@@ -1145,7 +1355,7 @@ class App:
         c, r = cell
         s = self.s
         x, y = (PAD + c * CELL + 2) * s, (PAD + r * CELL + 2) * s
-        self.cv.coords(self.hover_item, x, y, x + (CELL - 4) * s, y + (CELL - 4) * s)
+        self.cv.coords(self.hover_item, round(x), round(y), round(x + (CELL - 4) * s), round(y + (CELL - 4) * s))
         self.cv.itemconfig(self.hover_item, state="normal")
 
     def on_press(self, e):
@@ -1286,8 +1496,8 @@ class App:
         cv.tag_lower("dot", self.hover_item)
         x, y = self.center(self.state)
         h, a = (9, 4) if big else (19 * s, 7 * s)
-        cv.coords(self.halo, x - h, y - h, x + h, y + h)
-        cv.coords(self.agent_item, x - a, y - a, x + a, y + a)
+        cv.coords(self.halo, round(x - h), round(y - h), round(x + h), round(y + h))
+        cv.coords(self.agent_item, round(x - a), round(y - a), round(x + a), round(y + a))
 
         t = self.last_transition
         if t:

@@ -172,3 +172,19 @@ def test_same_structure_for_both_agents(maps):
     assert set(tab) == set(dqn) and set(tab["summary"]) == set(dqn["summary"])
     assert tab["agent"] == "tabular" and dqn["agent"] == "dqn"
     assert dqn["versions"]["torch"] and tab["params"]["alpha"] == 0.35
+
+
+def test_params_changed_during_run_are_noted(maps):
+    """Етап 7: у GUI повзунки можна рухати посеред запуску — запис це фіксує (settings.changed_during_run).
+    Зміна γ змінює й V*, з яким порівнюється шлях."""
+    env = GridEnv(maps["K3_rough"])
+    agent = TabularAgent(env)
+    rec = RunRecorder(env, agent, seed=None)
+    assert rec.finish()["settings"]["changed_during_run"] == []
+    rec.note_change("epsilon", 0.3)
+    rec.note_change("gamma", 0.99)
+    rec.note_change("epsilon", 0.2)                   # повторна зміна не дублюється
+    result = rec.finish()
+    assert result["settings"]["changed_during_run"] == ["epsilon", "gamma"]
+    assert result["gamma"] == 0.99
+    assert result["env"]["optimal_return"] == round(env.optimal_return(0.99), 6)

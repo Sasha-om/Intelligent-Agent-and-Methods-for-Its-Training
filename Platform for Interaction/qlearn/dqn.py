@@ -52,9 +52,13 @@ def torch_available():
 def _torch():
     try:
         import torch
-        return torch
     except Exception as exc:
         raise DQNUnavailable(TORCH_HINT) from exc
+    # Мережа крихітна (2×64, батч 32): кілька потоків лише чекають один одного й забирають процесор
+    # у вікна. В одному потоці крок швидший, а вікно не «смикається» (INS-015).
+    if torch.get_num_threads() != 1:
+        torch.set_num_threads(1)
+    return torch
 
 
 def masked_argmax(q_row, mask):
@@ -91,6 +95,7 @@ class DQNAgent(Agent):
     def reset(self):
         """Нова мережа, порожній буфер. Ваги мережі залежать від random.seed — запуски відтворювані."""
         torch, env, cfg = self.torch, self.env, self.cfg
+        feature_size(env, cfg["features"])               # onehot на завеликій сітці → ValueError (до витрат пам'яті)
         torch.manual_seed(random.getrandbits(32))
         self.X = torch.tensor(all_features(env, cfg["features"]), dtype=torch.float32)
         self.M = torch.tensor([action_mask(env, i) for i in range(env.cols * env.rows)], dtype=torch.bool)

@@ -49,6 +49,7 @@ class RunRecorder:
         self.optimal_return = env.optimal_return(self.gamma)
         self.optimal_cost = env.optimal_cost()
         self.rewards, self.steps, self.goals, self.evals = [], [], [], []
+        self.changed = []         # параметри, змінені посеред запуску (повзунки в GUI)
         self.started = time.perf_counter()
         self.created = datetime.now(timezone.utc)
 
@@ -60,6 +61,14 @@ class RunRecorder:
         self.goals.append(bool(result["goal"]))
         if len(self.rewards) % self.eval_every == 0:
             self.evals.append(dict(self.evaluate(), episode=len(self.rewards)))
+
+    def note_change(self, name, value):
+        """Параметр змінили посеред запуску (повзунок у GUI): запам'ятати назву; для γ — новий V*."""
+        if name not in self.changed:
+            self.changed.append(name)
+        if name == "gamma":
+            self.gamma = value
+            self.optimal_return = self.env.optimal_return(value)
 
     def run(self, episodes):
         """Навчити агента episodes епізодів із записом; повертає результат (finish())."""
@@ -121,7 +130,8 @@ class RunRecorder:
             "env": {"map": env.to_dict(), "fingerprint": env.fingerprint(),
                     "optimal_cost": self.optimal_cost,
                     "optimal_return": None if self.optimal_return is None else round(self.optimal_return, 6)},
-            "settings": {"eval_every": self.eval_every, "hold": self.hold, "last_n": self.last_n},
+            "settings": {"eval_every": self.eval_every, "hold": self.hold, "last_n": self.last_n,
+                         "changed_during_run": list(self.changed)},
             "metrics": {"reward_per_episode": list(self.rewards), "steps_per_episode": list(self.steps),
                         "reached_goal": [1 if g else 0 for g in self.goals]},
             "greedy_eval": [{k: v for k, v in e.items() if k != "path"} for e in self.evals],

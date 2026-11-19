@@ -87,3 +87,31 @@ class TestDQNStepper:
         stepper = EpisodeStepper(agent)
         rewards = stepper.train_for(5.0, max_episodes=2)
         assert len(rewards) == 2 and rewards[0] == pytest.approx(-3.0)
+
+
+def test_last_results_have_steps_and_goal(maps):
+    """Етап 7: для запису метрик потрібні не лише винагороди, а й кроки та фініш кожного епізоду."""
+    random.seed(5)
+    agent = TabularAgent(GridEnv(maps["K1_default"]))
+    stepper = EpisodeStepper(agent)
+    rewards = stepper.train_for(5.0, max_episodes=4)
+    results = stepper.last_results
+    assert [r["reward"] for r in results] == rewards
+    assert all(set(r) == {"reward", "steps", "goal"} and r["steps"] > 0 for r in results)
+
+
+def test_last_results_dqn_stepwise(maps):
+    pytest.importorskip("torch")
+    from qlearn.dqn import DQNAgent
+    random.seed(6)
+    agent = DQNAgent(GridEnv(maps["S_3x3"]))
+    stepper = EpisodeStepper(agent)
+    got = []
+    while len(got) < 3:
+        stepper.train_for(0.002, max_episodes=3 - len(got))
+        got += stepper.last_results
+    random.seed(6)
+    direct = DQNAgent(GridEnv(maps["S_3x3"]))
+    expected = [direct.run_episode() for _ in range(3)]
+    assert [(r["steps"], r["goal"]) for r in got] == [(e["steps"], e["goal"]) for e in expected]
+    assert [r["reward"] for r in got] == pytest.approx([e["reward"] for e in expected])

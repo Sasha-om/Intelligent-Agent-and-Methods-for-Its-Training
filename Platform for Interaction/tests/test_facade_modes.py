@@ -85,3 +85,40 @@ def test_golden_still_via_facade_after_mode_roundtrip(trainer, maps):
     m.load_env(maps["K1_default"])
     helpers.train(m, 600, seed=0)
     assert helpers.q_hash(m.q) == golden["scenarios"]["K1_default_seed0_600"]["snapshot"]["q_sha256"]
+
+
+# ------------------------------------------------------------------ етап 7
+def test_dqn_params_applied_to_new_agent(trainer):
+    pytest.importorskip("torch")
+    m = trainer.QModel()
+    m.set_mode("dqn")
+    m.set_dqn_params({"lr": 0.0005, "hidden": 32, "batch": 16, "buffer": 1000, "target_sync": 50,
+                      "features": "onehot"})
+    p = m.agent.params()
+    assert (p["lr"], p["hidden"], p["batch"], p["buffer"], p["target_sync"], p["features"]) == \
+           (0.0005, 32, 16, 1000, 50, "onehot")
+    m.set_mode("tabular")
+    m.set_mode("dqn")                                  # параметри мережі запам'ятовуються
+    assert m.agent.params()["hidden"] == 32
+
+
+def test_dqn_params_stored_in_tabular_mode(trainer):
+    pytest.importorskip("torch")
+    m = trainer.QModel()
+    m.set_dqn_params({"hidden": 16})
+    assert m.agent.name == "tabular"                   # таблицю не чіпаємо
+    m.set_mode("dqn")
+    assert m.agent.params()["hidden"] == 16
+
+
+def test_onehot_falls_back_to_compact_on_big_grid(trainer):
+    """onehot підходить лише до 900 клітинок: якщо сітку збільшили — мережа переходить на compact
+    (і фасад повідомляє про це), а не падає."""
+    pytest.importorskip("torch")
+    m = trainer.QModel()
+    m.set_mode("dqn")
+    m.set_dqn_params({"features": "onehot"})
+    m.cols, m.rows = 31, 30
+    notice = m.rebuild()
+    assert m.agent.params()["features"] == "compact" and m.dqn_params["features"] == "compact"
+    assert notice and "compact" in notice

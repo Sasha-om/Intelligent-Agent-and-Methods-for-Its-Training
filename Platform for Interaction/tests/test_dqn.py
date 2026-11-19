@@ -222,3 +222,11 @@ def test_learn_step_and_run_episode_equivalent(maps):
                 break
     assert slow.q_snapshot() == fast.q_snapshot()
     assert slow.learn_steps == fast.learn_steps
+
+
+def test_torch_uses_one_thread(maps):
+    """Мережа крихітна (2×64): багато потоків PyTorch лише конкурують із вікном за процесор
+    і роблять крок повільнішим (етап 6, INS-015). Агент DQN працює в одному потоці."""
+    torch = pytest.importorskip("torch")
+    DQNAgent(GridEnv(maps["S_3x3"]))
+    assert torch.get_num_threads() == 1
