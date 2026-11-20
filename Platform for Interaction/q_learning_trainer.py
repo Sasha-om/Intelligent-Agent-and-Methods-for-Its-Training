@@ -1,15 +1,21 @@
 """
 Тренажер Q-навчання — Python-версія (tkinter).
 
-Повний відповідник «Тренажер Q-навчання.html»: той самий алгоритм, інтерфейс,
+Табличний режим — повний відповідник «Тренажер Q-навчання.html»: той самий алгоритм, інтерфейс,
 редактор середовища (до 100×100 клітинок), швидке навчання, таблиця Q(s,a)
 з експортом у CSV / JSON та ті самі оптимізації для великих сіток.
 
-Архітектура: логіка (середовище й агенти) — у пакеті qlearn/ поруч із цим файлом
-(«бекенд»); тут — інтерфейс tkinter («фронтенд») і фасад QModel.
+Лише в Python-версії (у вебверсії їх немає):
+  • режим «Нейромережа» (DQN, PyTorch) з перемикачем «Таблиця / Нейромережа» і панеллю параметрів мережі;
+  • seed, «Зберегти результат…» / автозбереження запуску в results/ (JSON, схема v1);
+  • вікно «Порівняння результатів»: таблиця метрик, криві навчання, групування за seed, CSV.
+
+Архітектура: логіка (середовище, агенти, запис і порівняння) — у пакеті qlearn/ поруч із цим файлом
+(«бекенд»); тут — інтерфейс tkinter («фронтенд»), фасад QModel і вікно CompareWindow.
 
 Запуск:  python q_learning_trainer.py
-Потрібен лише стандартний Python 3 (tkinter входить до складу).
+Табличний режим — лише стандартний Python 3 (tkinter входить до складу).
+Режим «Нейромережа» — Python з PyTorch (у проєкті: Pytorch_test\.venv\Scripts\python.exe).
 """
 
 import json
@@ -1755,7 +1761,8 @@ class CompareWindow(tk.Toplevel):
         left = tk.Frame(body, bg=PANEL, highlightbackground=BORDER, highlightthickness=1, padx=14, pady=14)
         left.pack(side="left", fill="y")
         tk.Label(left, text="ЗБЕРЕЖЕНІ ЗАПУСКИ", bg=PANEL, fg=TEXT_DIM, font=F(11.5, "bold")).pack(anchor="w")
-        tk.Label(left, text="Кілька — з Ctrl або Shift", bg=PANEL, fg=TEXT_FAINT, font=F(11)).pack(anchor="w")
+        tk.Label(left, text="Кілька — з Ctrl або Shift; разом із підпапками", bg=PANEL, fg=TEXT_FAINT,
+                 font=F(11)).pack(anchor="w")
         box = tk.Frame(left, bg=PANEL)
         box.pack(fill="both", expand=True, pady=(8, 8))
         self.listbox = tk.Listbox(box, selectmode="extended", exportselection=False, width=44,
@@ -1769,8 +1776,8 @@ class CompareWindow(tk.Toplevel):
         self.listbox.bind("<<ListboxSelect>>", lambda e: self.redraw())
         btns = tk.Frame(left, bg=PANEL)
         btns.pack(fill="x")
-        for text, cmd in (("Вибрати всі", self.select_all), ("Додати файл…", self.on_add_click),
-                          ("Оновити", self.refresh)):
+        for text, cmd in (("Вибрати всі", self.select_all), ("Папка…", self.on_folder_click),
+                          ("Додати файл…", self.on_add_click), ("Оновити", self.refresh)):
             b = FlatButton(btns, text, cmd, font=F(11.5, "bold"), pady=5)
             b.config(padx=10)
             b.pack(side="left", padx=(0, 6))
@@ -1830,7 +1837,7 @@ class CompareWindow(tk.Toplevel):
 
     # --------------------------------------------------------------- дані
     def _paths(self):
-        paths = list(list_runs(self.folder))
+        paths = list(list_runs(self.folder, recursive=True))
         for p in self.extra:
             if all(p.resolve() != q.resolve() for q in paths):
                 paths.append(p)
@@ -1893,6 +1900,18 @@ class CompareWindow(tk.Toplevel):
         self.redraw()
 
     # -------------------------------------------------------- кнопки
+    def set_folder(self, folder):
+        """Показати запуски з іншої папки (разом із підпапками), наприклад results/exp-20261119."""
+        self.folder = Path(folder)
+        self.listbox.selection_clear(0, "end")
+        self.refresh()
+
+    def on_folder_click(self):
+        folder = filedialog.askdirectory(parent=self, title="Папка із запусками",
+                                         initialdir=str(self.folder) if self.folder.is_dir() else None)
+        if folder:
+            self.set_folder(folder)
+
     def on_add_click(self):
         for name in filedialog.askopenfilenames(parent=self, title="Додати запуск",
                                                 filetypes=[("Запуск (JSON)", "*.json"), ("Усі файли", "*.*")]):

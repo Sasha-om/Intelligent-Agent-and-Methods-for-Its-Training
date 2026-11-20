@@ -145,3 +145,18 @@ def test_group_mode_table_colors_match_lines(trainer, root, folder):
     tab = [i for i in ids if "tabular" in i]
     assert win.colors[tab[0]] == win.colors[tab[1]]
     win.close()
+
+
+def test_choose_folder_with_subfolders(trainer, root, folder, tmp_path):
+    """Етап 9: «Папка…» — інша папка з експериментами; запуски з підпапок (results/exp-*/<серія>/) теж видно."""
+    exp = tmp_path / "exp-test"
+    (exp / "K1").mkdir(parents=True)
+    (exp / "K3").mkdir()
+    shutil.copy(folder / "fixture_run_tabular.json", exp / "K1" / "t.json")
+    shutil.copy(folder / "fixture_run_dqn.json", exp / "K3" / "d.json")
+    win = trainer.CompareWindow(root, folder=folder)
+    win.set_folder(exp)
+    assert win.folder == exp and len(win.runs) == 2
+    assert "exp-test" in win.status.cget("text")
+    win.close()
+    assert root.errors == []

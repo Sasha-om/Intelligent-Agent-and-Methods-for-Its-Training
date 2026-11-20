@@ -173,7 +173,10 @@ def load_run(path):
     return data
 
 
-def list_runs(folder=RESULTS_DIR):
-    """Усі *.json у папці результатів, за іменем (тобто за часом створення)."""
+def list_runs(folder=RESULTS_DIR, recursive=False):
+    """Усі *.json у папці результатів, за іменем (тобто за часом створення).
+    recursive=True — і з підпапок (експерименти етапу 9: results/exp-<дата>/<серія>/)."""
     folder = Path(folder)
-    return sorted(folder.glob("*.json")) if folder.is_dir() else []
+    if not folder.is_dir():
+        return []
+    return sorted(folder.rglob("*.json") if recursive else folder.glob("*.json"))
