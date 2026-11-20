@@ -1,0 +1,7 @@
+# Залежності nmt_adaptive (Python 3.11–3.14). Встановлення: python -m pip install -r requirements.txt
+# Перевірено на Python 3.11.18 і 3.14.6 з: numpy 2.4.6 (3.11) і 2.5.5 (3.14), pandas 3.1.1, matplotlib 3.11.2, streamlit 1.67.0, pytest 9.2.0
+numpy>=1.26
+pandas>=2.1
+matplotlib>=3.8
+streamlit>=1.32
+pytest>=8.0
