@@ -88,3 +88,12 @@ def test_numbers_rounded(maps):
     r = make_result(maps)
     for v in r["metrics"]["reward_per_episode"]:
         assert round(v, 4) == v
+
+
+def test_list_runs_recursive(tmp_path):
+    """Етап 9: експерименти лежать у results/exp-<дата>/<серія>/ — вікно порівняння читає й підпапки."""
+    (tmp_path / "exp-1" / "K1").mkdir(parents=True)
+    for p in (tmp_path / "a.json", tmp_path / "exp-1" / "K1" / "b.json"):
+        p.write_text("{}", encoding="utf-8")
+    assert [p.name for p in list_runs(tmp_path)] == ["a.json"]
+    assert [p.name for p in list_runs(tmp_path, recursive=True)] == ["a.json", "b.json"]
