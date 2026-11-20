@@ -24,3 +24,13 @@ docs/*.png
 # Редактори
 .vscode/
 .idea/
+
+# === nmt_adaptive: дані учнів і секрети (ніколи не в git, навіть анонімні) ===
+*.db
+*.sqlite
+*.sqlite3
+nmt_adaptive/data/students/
+nmt_adaptive/data/exports/
+.env
+.streamlit/secrets.toml
+**/.streamlit/secrets.toml
