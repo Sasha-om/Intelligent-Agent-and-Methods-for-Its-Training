@@ -1,0 +1,1549 @@
+[
+ {
+  "id": "it001",
+  "topic": "functions",
+  "topic_name": "Функції",
+  "subtopic": "domain",
+  "subtopic_name": "Область визначення",
+  "difficulty": -2.0,
+  "template": "domain",
+  "params": {
+   "level": -2,
+   "a": 4
+  },
+  "question": "Знайдіть область визначення функції y = 1/(x − 4).",
+  "options": [
+   "{4}",
+   "(−∞; −4) ∪ (−4; +∞)",
+   "(−∞; 4) ∪ (4; +∞)",
+   "(4; +∞)"
+  ],
+  "answer": 2,
+  "explanation": "На нуль ділити не можна: (x − 4) ≠ 0, тобто x ≠ 4."
+ },
+ {
+  "id": "it002",
+  "topic": "functions",
+  "topic_name": "Функції",
+  "subtopic": "range",
+  "subtopic_name": "Область значень",
+  "difficulty": -1.0,
+  "template": "range",
+  "params": {
+   "level": -1,
+   "a": -1,
+   "b": 0,
+   "c": -4
+  },
+  "question": "Знайдіть область значень функції y = −x² − 4.",
+  "options": [
+   "(−∞; −4]",
+   "(−∞; 4]",
+   "(−∞; 0]",
+   "[−4; +∞)"
+  ],
+  "answer": 0,
+  "explanation": "Графік — парабола, a = −1, тому гілки напрямлені вниз."
+ },
+ {
+  "id": "it003",
+  "topic": "functions",
+  "topic_name": "Функції",
+  "subtopic": "monotonic",
+  "subtopic_name": "Зростання і спадання",
+  "difficulty": 0.0,
+  "template": "monotonic",
+  "params": {
+   "level": 0,
+   "a": -1,
+   "h": 5,
+   "k": 3,
+   "ask": "up"
+  },
+  "question": "Укажіть проміжок зростання функції y = −(x − 5)² + 3.",
+  "options": [
+   "(−∞; 5]",
+   "(−∞; −5]",
+   "[−5; +∞)",
+   "[5; +∞)"
+  ],
+  "answer": 0,
+  "explanation": "Парабола, a = −1: гілки вниз; абсциса вершини x₀ = 5."
+ },
+ {
+  "id": "it004",
+  "topic": "functions",
+  "topic_name": "Функції",
+  "subtopic": "linear_func",
+  "subtopic_name": "Лінійна функція і її графік",
+  "difficulty": 1.0,
+  "template": "linear_func",
+  "params": {
+   "level": 1,
+   "k1": -3,
+   "k2": 4,
+   "x0": -3,
+   "y0": -2
+  },
+  "question": "Знайдіть координати точки перетину графіків функцій y = −3x − 11 і y = 4x + 10.",
+  "options": [
+   "(−3; −2)",
+   "(−2; −3)",
+   "(−3; 2)",
+   "(3; −2)"
+  ],
+  "answer": 0,
+  "explanation": "Прирівнюємо: −3x − 11 = 4x + 10, звідси x = −3."
+ },
+ {
+  "id": "it005",
+  "topic": "functions",
+  "topic_name": "Функції",
+  "subtopic": "quadratic_func",
+  "subtopic_name": "Квадратична функція і її графік",
+  "difficulty": 2.0,
+  "template": "quadratic_func",
+  "params": {
+   "level": 2,
+   "p": 6
+  },
+  "question": "При якому значенні c парабола y = x² + 6x + c має з віссю абсцис рівно одну спільну точку?",
+  "options": [
+   "−9",
+   "9",
+   "3",
+   "18"
+  ],
+  "answer": 1,
+  "explanation": "Одна спільна точка з віссю Ox — це дискримінант D = 0."
+ },
+ {
+  "id": "it006",
+  "topic": "inequalities",
+  "topic_name": "Нерівності",
+  "subtopic": "linear_ineq",
+  "subtopic_name": "Лінійні нерівності",
+  "difficulty": -2.0,
+  "template": "linear_ineq",
+  "params": {
+   "level": -2,
+   "m": 5,
+   "n": 9,
+   "op": ">="
+  },
+  "question": "Розв'яжіть нерівність x + 5 ≥ 9.",
+  "options": [
+   "(−∞; 4]",
+   "[4; +∞)",
+   "[14; +∞)",
+   "[−4; +∞)"
+  ],
+  "answer": 1,
+  "explanation": "Переносимо доданки з x ліворуч, числа праворуч: x ≥ 4."
+ },
+ {
+  "id": "it007",
+  "topic": "inequalities",
+  "topic_name": "Нерівності",
+  "subtopic": "quadratic_ineq",
+  "subtopic_name": "Квадратні нерівності",
+  "difficulty": -1.0,
+  "template": "quadratic_ineq",
+  "params": {
+   "level": -1,
+   "lead": 1,
+   "r1": -6,
+   "r2": 6,
+   "op": ">"
+  },
+  "question": "Розв'яжіть нерівність x² > 36.",
+  "options": [
+   "[−6; 6]",
+   "(−∞; −5) ∪ (7; +∞)",
+   "(−∞; −6] ∪ [6; +∞)",
+   "(−∞; −6) ∪ (6; +∞)"
+  ],
+  "answer": 3,
+  "explanation": "Корені тричлена: x₁ = −6, x₂ = 6."
+ },
+ {
+  "id": "it008",
+  "topic": "inequalities",
+  "topic_name": "Нерівності",
+  "subtopic": "interval_method",
+  "subtopic_name": "Метод інтервалів",
+  "difficulty": 0.0,
+  "template": "interval_method",
+  "params": {
+   "level": 0,
+   "num": [
+    -4
+   ],
+   "den": [
+    -3
+   ],
+   "op": "<="
+  },
+  "question": "Розв'яжіть методом інтервалів нерівність (x + 4)/(x + 3) ≤ 0.",
+  "options": [
+   "(−4; −3]",
+   "(−∞; −4) ∪ [−3; +∞)",
+   "[−4; −3)",
+   "[−4; −3]"
+  ],
+  "answer": 2,
+  "explanation": "Нулі чисельника: −4."
+ },
+ {
+  "id": "it009",
+  "topic": "inequalities",
+  "topic_name": "Нерівності",
+  "subtopic": "ineq_system",
+  "subtopic_name": "Системи нерівностей",
+  "difficulty": 1.0,
+  "template": "ineq_system",
+  "params": {
+   "level": 1,
+   "ask": "count",
+   "ineqs": [
+    {
+     "kind": "lin",
+     "a": -4,
+     "b": 6,
+     "c": 10,
+     "op": "<"
+    },
+    {
+     "kind": "lin",
+     "a": 2,
+     "b": 5,
+     "c": 15,
+     "op": "<="
+    }
+   ]
+  },
+  "question": "Скільки цілих розв'язків має система нерівностей { −4x + 6 < 10;  2x + 5 ≤ 15 }?",
+  "options": [
+   "5",
+   "7",
+   "8",
+   "6"
+  ],
+  "answer": 3,
+  "explanation": "Перша нерівність: (−1; +∞)."
+ },
+ {
+  "id": "it010",
+  "topic": "functions",
+  "topic_name": "Функції",
+  "subtopic": "domain",
+  "subtopic_name": "Область визначення",
+  "difficulty": -1.0,
+  "template": "domain",
+  "params": {
+   "level": -1,
+   "a": -5
+  },
+  "question": "Знайдіть область визначення функції y = √(x + 5).",
+  "options": [
+   "(−5; +∞)",
+   "[5; +∞)",
+   "[−5; +∞)",
+   "(−∞; −5]"
+  ],
+  "answer": 2,
+  "explanation": "Під коренем має бути невід'ємне число: (x + 5) ≥ 0, отже x ≥ −5."
+ },
+ {
+  "id": "it011",
+  "topic": "functions",
+  "topic_name": "Функції",
+  "subtopic": "range",
+  "subtopic_name": "Область значень",
+  "difficulty": 0.0,
+  "template": "range",
+  "params": {
+   "level": 0,
+   "h": 4,
+   "k": -3
+  },
+  "question": "Знайдіть область значень функції y = (x − 4)² − 3.",
+  "options": [
+   "(−∞; −3]",
+   "[13; +∞)",
+   "[−3; +∞)",
+   "[4; +∞)"
+  ],
+  "answer": 2,
+  "explanation": "Графік — парабола, a = 1, тому гілки напрямлені вгору."
+ },
+ {
+  "id": "it012",
+  "topic": "functions",
+  "topic_name": "Функції",
+  "subtopic": "monotonic",
+  "subtopic_name": "Зростання і спадання",
+  "difficulty": 1.0,
+  "template": "monotonic",
+  "params": {
+   "level": 1,
+   "a": 1,
+   "b": -6,
+   "c": -2,
+   "ask": "down"
+  },
+  "question": "Укажіть проміжок спадання функції y = x² − 6x − 2.",
+  "options": [
+   "(−∞; 3]",
+   "[−3; +∞)",
+   "(−∞; −3]",
+   "[3; +∞)"
+  ],
+  "answer": 0,
+  "explanation": "Парабола, a = 1: гілки вгору; абсциса вершини x₀ = 3."
+ },
+ {
+  "id": "it013",
+  "topic": "functions",
+  "topic_name": "Функції",
+  "subtopic": "linear_func",
+  "subtopic_name": "Лінійна функція і її графік",
+  "difficulty": 2.0,
+  "template": "linear_func",
+  "params": {
+   "level": 2,
+   "k": 1,
+   "c": -3,
+   "x0": 1,
+   "y0": -3
+  },
+  "question": "Задайте формулою лінійну функцію, графік якої паралельний прямій y = x − 3 і проходить через точку M(1; −3).",
+  "options": [
+   "y = x − 4",
+   "y = −x − 4",
+   "y = x − 2",
+   "y = x − 3"
+  ],
+  "answer": 0,
+  "explanation": "Паралельні прямі мають однаковий кутовий коефіцієнт: k = 1."
+ },
+ {
+  "id": "it014",
+  "topic": "functions",
+  "topic_name": "Функції",
+  "subtopic": "quadratic_func",
+  "subtopic_name": "Квадратична функція і її графік",
+  "difficulty": -2.0,
+  "template": "quadratic_func",
+  "params": {
+   "level": -2,
+   "h": 5,
+   "k": 4
+  },
+  "question": "Знайдіть координати вершини параболи y = (x − 5)² + 4.",
+  "options": [
+   "(5; −4)",
+   "(5; 4)",
+   "(−5; −4)",
+   "(−5; 4)"
+  ],
+  "answer": 1,
+  "explanation": "Для y = (x − h)² + k вершина — точка (h; k). Увага: у дужці стоїть «x мінус h»."
+ },
+ {
+  "id": "it015",
+  "topic": "inequalities",
+  "topic_name": "Нерівності",
+  "subtopic": "linear_ineq",
+  "subtopic_name": "Лінійні нерівності",
+  "difficulty": -1.0,
+  "template": "linear_ineq",
+  "params": {
+   "level": -1,
+   "k": 3,
+   "n": 2,
+   "op": ">="
+  },
+  "question": "Розв'яжіть нерівність 3x ≥ 2.",
+  "options": [
+   "(2/3; +∞)",
+   "(−∞; 2/3]",
+   "[−2/3; +∞)",
+   "[2/3; +∞)"
+  ],
+  "answer": 3,
+  "explanation": "Переносимо доданки з x ліворуч, числа праворуч: 3x ≥ 2."
+ },
+ {
+  "id": "it016",
+  "topic": "inequalities",
+  "topic_name": "Нерівності",
+  "subtopic": "quadratic_ineq",
+  "subtopic_name": "Квадратні нерівності",
+  "difficulty": 0.0,
+  "template": "quadratic_ineq",
+  "params": {
+   "level": 0,
+   "lead": 1,
+   "r1": -1,
+   "r2": 4,
+   "op": ">"
+  },
+  "question": "Розв'яжіть нерівність (x + 1)(x − 4) > 0.",
+  "options": [
+   "(−∞; −4) ∪ (1; +∞)",
+   "(−∞; −1) ∪ (4; +∞)",
+   "[−1; 4]",
+   "(−∞; −1] ∪ [4; +∞)"
+  ],
+  "answer": 1,
+  "explanation": "Корені тричлена: x₁ = −1, x₂ = 4."
+ },
+ {
+  "id": "it017",
+  "topic": "inequalities",
+  "topic_name": "Нерівності",
+  "subtopic": "interval_method",
+  "subtopic_name": "Метод інтервалів",
+  "difficulty": 1.0,
+  "template": "interval_method",
+  "params": {
+   "level": 1,
+   "num": [
+    -5,
+    -2,
+    0
+   ],
+   "den": [],
+   "op": ">="
+  },
+  "question": "Розв'яжіть методом інтервалів нерівність x(x + 5)(x + 2) ≥ 0.",
+  "options": [
+   "[−5; −2] ∪ [0; +∞)",
+   "(−5; −2) ∪ (0; +∞)",
+   "(−∞; −5) ∪ (−2; 0)",
+   "(−∞; 0] ∪ [2; 5]"
+  ],
+  "answer": 0,
+  "explanation": "Нулі чисельника: −5, −2, 0."
+ },
+ {
+  "id": "it018",
+  "topic": "inequalities",
+  "topic_name": "Нерівності",
+  "subtopic": "ineq_system",
+  "subtopic_name": "Системи нерівностей",
+  "difficulty": 2.0,
+  "template": "ineq_system",
+  "params": {
+   "level": 2,
+   "ask": "set",
+   "ineqs": [
+    {
+     "kind": "sq",
+     "n": 3,
+     "op": "<="
+    },
+    {
+     "kind": "lin",
+     "a": 1,
+     "b": 0,
+     "c": -1,
+     "op": ">="
+    }
+   ]
+  },
+  "question": "Розв'яжіть систему нерівностей { x² ≤ 9;  x ≥ −1 }.",
+  "options": [
+   "(−∞; −1) ∪ (3; +∞)",
+   "[−1; 3]",
+   "[−3; +∞)",
+   "(−1; 3)"
+  ],
+  "answer": 1,
+  "explanation": "Перша нерівність: [−3; 3]."
+ },
+ {
+  "id": "it019",
+  "topic": "functions",
+  "topic_name": "Функції",
+  "subtopic": "domain",
+  "subtopic_name": "Область визначення",
+  "difficulty": 0.0,
+  "template": "domain",
+  "params": {
+   "level": 0,
+   "k": 5,
+   "m": 9
+  },
+  "question": "Знайдіть область визначення функції y = √(9 − 5x).",
+  "options": [
+   "(−∞; 9/5)",
+   "[9/5; +∞)",
+   "(−∞; −9/5]",
+   "(−∞; 9/5]"
+  ],
+  "answer": 3,
+  "explanation": "Під коренем: 9 − 5x ≥ 0, тобто −5x ≥ −9."
+ },
+ {
+  "id": "it020",
+  "topic": "functions",
+  "topic_name": "Функції",
+  "subtopic": "range",
+  "subtopic_name": "Область значень",
+  "difficulty": 1.0,
+  "template": "range",
+  "params": {
+   "level": 1,
+   "a": 1,
+   "b": -4,
+   "c": 2
+  },
+  "question": "Знайдіть область значень функції y = x² − 4x + 2.",
+  "options": [
+   "(−∞; −2]",
+   "(−2; +∞)",
+   "[2; +∞)",
+   "[−2; +∞)"
+  ],
+  "answer": 3,
+  "explanation": "Графік — парабола, a = 1, тому гілки напрямлені вгору."
+ },
+ {
+  "id": "it021",
+  "topic": "functions",
+  "topic_name": "Функції",
+  "subtopic": "monotonic",
+  "subtopic_name": "Зростання і спадання",
+  "difficulty": 2.0,
+  "template": "monotonic",
+  "params": {
+   "level": 2,
+   "a": -2,
+   "b": -5,
+   "c": 5,
+   "ask": "up"
+  },
+  "question": "Укажіть проміжок зростання функції y = −2x² − 5x + 5.",
+  "options": [
+   "(−∞; 5/4]",
+   "[−5/4; +∞)",
+   "[5/4; +∞)",
+   "(−∞; −5/4]"
+  ],
+  "answer": 3,
+  "explanation": "Парабола, a = −2: гілки вниз; абсциса вершини x₀ = −5/4."
+ },
+ {
+  "id": "it022",
+  "topic": "functions",
+  "topic_name": "Функції",
+  "subtopic": "linear_func",
+  "subtopic_name": "Лінійна функція і її графік",
+  "difficulty": -2.0,
+  "template": "linear_func",
+  "params": {
+   "level": -2,
+   "k": 1,
+   "b": 3,
+   "x0": 3
+  },
+  "question": "Обчисліть значення функції y = x + 3 при x = 3.",
+  "options": [
+   "3",
+   "0",
+   "6",
+   "7"
+  ],
+  "answer": 2,
+  "explanation": "Підставляємо x = 3: y = 1·(3) + (3)."
+ },
+ {
+  "id": "it023",
+  "topic": "functions",
+  "topic_name": "Функції",
+  "subtopic": "quadratic_func",
+  "subtopic_name": "Квадратична функція і її графік",
+  "difficulty": -1.0,
+  "template": "quadratic_func",
+  "params": {
+   "level": -1,
+   "a": 1,
+   "b": 4,
+   "c": -5,
+   "x0": 2
+  },
+  "question": "Обчисліть значення функції y = x² + 4x − 5 при x = 2.",
+  "options": [
+   "−1",
+   "−9",
+   "7",
+   "8"
+  ],
+  "answer": 2,
+  "explanation": "Підставляємо x = 2: y = (2)² + 4·(2) + (−5)."
+ },
+ {
+  "id": "it024",
+  "topic": "inequalities",
+  "topic_name": "Нерівності",
+  "subtopic": "linear_ineq",
+  "subtopic_name": "Лінійні нерівності",
+  "difficulty": 0.0,
+  "template": "linear_ineq",
+  "params": {
+   "level": 0,
+   "m": 4,
+   "k": 3,
+   "n": 5,
+   "op": ">"
+  },
+  "question": "Розв'яжіть нерівність 4 − 3x > 5.",
+  "options": [
+   "(−∞; −1/3)",
+   "(−∞; 1/3)",
+   "(−∞; −1/3]",
+   "(−1/3; +∞)"
+  ],
+  "answer": 0,
+  "explanation": "Переносимо доданки з x ліворуч, числа праворуч: −3x > 1."
+ },
+ {
+  "id": "it025",
+  "topic": "inequalities",
+  "topic_name": "Нерівності",
+  "subtopic": "quadratic_ineq",
+  "subtopic_name": "Квадратні нерівності",
+  "difficulty": 1.0,
+  "template": "quadratic_ineq",
+  "params": {
+   "level": 1,
+   "lead": 1,
+   "r1": -4,
+   "r2": 2,
+   "op": ">"
+  },
+  "question": "Розв'яжіть нерівність x² + 2x − 8 > 0.",
+  "options": [
+   "(−∞; −4] ∪ [2; +∞)",
+   "[−4; 2]",
+   "(−∞; −4) ∪ (2; +∞)",
+   "(−∞; −2) ∪ (4; +∞)"
+  ],
+  "answer": 2,
+  "explanation": "Корені тричлена: x₁ = −4, x₂ = 2."
+ },
+ {
+  "id": "it026",
+  "topic": "inequalities",
+  "topic_name": "Нерівності",
+  "subtopic": "interval_method",
+  "subtopic_name": "Метод інтервалів",
+  "difficulty": 2.0,
+  "template": "interval_method",
+  "params": {
+   "level": 2,
+   "num": [
+    -4,
+    -1
+   ],
+   "den": [
+    6
+   ],
+   "op": ">="
+  },
+  "question": "Розв'яжіть методом інтервалів нерівність (x + 4)(x + 1)/(x − 6) ≥ 0.",
+  "options": [
+   "[−4; −1] ∪ (6; +∞)",
+   "[−4; −1] ∪ [6; +∞)",
+   "(−∞; −4) ∪ (−1; 6]",
+   "(−4; −1) ∪ [6; +∞)"
+  ],
+  "answer": 0,
+  "explanation": "Нулі чисельника: −4, −1."
+ },
+ {
+  "id": "it027",
+  "topic": "inequalities",
+  "topic_name": "Нерівності",
+  "subtopic": "ineq_system",
+  "subtopic_name": "Системи нерівностей",
+  "difficulty": -2.0,
+  "template": "ineq_system",
+  "params": {
+   "level": -2,
+   "ask": "set",
+   "ineqs": [
+    {
+     "kind": "lin",
+     "a": 1,
+     "b": 0,
+     "c": -2,
+     "op": ">"
+    },
+    {
+     "kind": "lin",
+     "a": 1,
+     "b": 0,
+     "c": 1,
+     "op": "<="
+    }
+   ]
+  },
+  "question": "Розв'яжіть систему нерівностей { x > −2;  x ≤ 1 }.",
+  "options": [
+   "[−2; 1)",
+   "(−∞; −2] ∪ (1; +∞)",
+   "(−2; 1]",
+   "(−∞; +∞)"
+  ],
+  "answer": 2,
+  "explanation": "Перша нерівність: (−2; +∞)."
+ },
+ {
+  "id": "it028",
+  "topic": "functions",
+  "topic_name": "Функції",
+  "subtopic": "domain",
+  "subtopic_name": "Область визначення",
+  "difficulty": 1.0,
+  "template": "domain",
+  "params": {
+   "level": 1,
+   "a": -4,
+   "c": 0
+  },
+  "question": "Знайдіть область визначення функції y = √(x + 4) + 1/x.",
+  "options": [
+   "[−4; 0)",
+   "[−4; 0) ∪ (0; +∞)",
+   "(−4; 0) ∪ (0; +∞)",
+   "[−4; +∞)"
+  ],
+  "answer": 1,
+  "explanation": "Корінь: x ≥ −4. Дріб: x ≠ 0."
+ },
+ {
+  "id": "it029",
+  "topic": "functions",
+  "topic_name": "Функції",
+  "subtopic": "range",
+  "subtopic_name": "Область значень",
+  "difficulty": 2.0,
+  "template": "range",
+  "params": {
+   "level": 2,
+   "a": -2,
+   "b": 7,
+   "c": 3
+  },
+  "question": "Знайдіть область значень функції y = −2x² + 7x + 3.",
+  "options": [
+   "(−∞; 7/4]",
+   "(−∞; 3]",
+   "(−∞; 73/8]",
+   "[73/8; +∞)"
+  ],
+  "answer": 2,
+  "explanation": "Графік — парабола, a = −2, тому гілки напрямлені вниз."
+ },
+ {
+  "id": "it030",
+  "topic": "functions",
+  "topic_name": "Функції",
+  "subtopic": "monotonic",
+  "subtopic_name": "Зростання і спадання",
+  "difficulty": -2.0,
+  "template": "monotonic",
+  "params": {
+   "level": -2,
+   "k": -2,
+   "b": 2
+  },
+  "question": "Як змінюється функція y = −2x + 2?",
+  "options": [
+   "зростає на всій числовій прямій",
+   "спадає на всій числовій прямій",
+   "зростає при x > 0 і спадає при x < 0",
+   "стала на всій числовій прямій"
+  ],
+  "answer": 1,
+  "explanation": "Це лінійна функція з кутовим коефіцієнтом k = −2."
+ },
+ {
+  "id": "it031",
+  "topic": "functions",
+  "topic_name": "Функції",
+  "subtopic": "linear_func",
+  "subtopic_name": "Лінійна функція і її графік",
+  "difficulty": -1.0,
+  "template": "linear_func",
+  "params": {
+   "level": -1,
+   "k": 4,
+   "b": 2
+  },
+  "question": "Знайдіть нуль функції y = 4x + 2.",
+  "options": [
+   "1/2",
+   "−2",
+   "−3/2",
+   "−1/2"
+  ],
+  "answer": 3,
+  "explanation": "Нуль функції — це x, при якому y = 0: 4x + 2 = 0."
+ },
+ {
+  "id": "it032",
+  "topic": "functions",
+  "topic_name": "Функції",
+  "subtopic": "quadratic_func",
+  "subtopic_name": "Квадратична функція і її графік",
+  "difficulty": 0.0,
+  "template": "quadratic_func",
+  "params": {
+   "level": 0,
+   "a": 1,
+   "b": -6,
+   "c": -3
+  },
+  "question": "Знайдіть координати вершини параболи y = x² − 6x − 3.",
+  "options": [
+   "(−12; 3)",
+   "(3; −12)",
+   "(−3; −12)",
+   "(3; −3)"
+  ],
+  "answer": 1,
+  "explanation": "x₀ = −b/(2a) = 3."
+ },
+ {
+  "id": "it033",
+  "topic": "inequalities",
+  "topic_name": "Нерівності",
+  "subtopic": "linear_ineq",
+  "subtopic_name": "Лінійні нерівності",
+  "difficulty": 1.0,
+  "template": "linear_ineq",
+  "params": {
+   "level": 1,
+   "a": 3,
+   "b": 0,
+   "p": -4,
+   "c": -6,
+   "op": ">"
+  },
+  "question": "Розв'яжіть нерівність 3(x + 4) > −6.",
+  "options": [
+   "(6; +∞)",
+   "[−6; +∞)",
+   "(−6; +∞)",
+   "(−∞; −6)"
+  ],
+  "answer": 2,
+  "explanation": "Переносимо доданки з x ліворуч, числа праворуч: 3x > −18."
+ },
+ {
+  "id": "it034",
+  "topic": "inequalities",
+  "topic_name": "Нерівності",
+  "subtopic": "quadratic_ineq",
+  "subtopic_name": "Квадратні нерівності",
+  "difficulty": 2.0,
+  "template": "quadratic_ineq",
+  "params": {
+   "level": 2,
+   "lead": -1,
+   "r1": -6,
+   "r2": -1,
+   "op": ">="
+  },
+  "question": "Розв'яжіть нерівність −x² − 7x − 6 ≥ 0.",
+  "options": [
+   "(−∞; −6] ∪ [−1; +∞)",
+   "(−∞; −6) ∪ (−1; +∞)",
+   "[−6; −1]",
+   "(−6; −1)"
+  ],
+  "answer": 2,
+  "explanation": "Корені тричлена: x₁ = −6, x₂ = −1."
+ },
+ {
+  "id": "it035",
+  "topic": "inequalities",
+  "topic_name": "Нерівності",
+  "subtopic": "interval_method",
+  "subtopic_name": "Метод інтервалів",
+  "difficulty": -2.0,
+  "template": "interval_method",
+  "params": {
+   "level": -2,
+   "num": [
+    -3,
+    2
+   ],
+   "den": [],
+   "op": ">="
+  },
+  "question": "Розв'яжіть методом інтервалів нерівність (x + 3)(x − 2) ≥ 0.",
+  "options": [
+   "(−∞; −2] ∪ [3; +∞)",
+   "(−∞; −3) ∪ (2; +∞)",
+   "(−3; 2)",
+   "(−∞; −3] ∪ [2; +∞)"
+  ],
+  "answer": 3,
+  "explanation": "Нулі чисельника: −3, 2."
+ },
+ {
+  "id": "it036",
+  "topic": "inequalities",
+  "topic_name": "Нерівності",
+  "subtopic": "ineq_system",
+  "subtopic_name": "Системи нерівностей",
+  "difficulty": -1.0,
+  "template": "ineq_system",
+  "params": {
+   "level": -1,
+   "ask": "set",
+   "ineqs": [
+    {
+     "kind": "lin",
+     "a": 5,
+     "b": 0,
+     "c": -25,
+     "op": ">="
+    },
+    {
+     "kind": "lin",
+     "a": 1,
+     "b": 0,
+     "c": -3,
+     "op": "<"
+    }
+   ]
+  },
+  "question": "Розв'яжіть систему нерівностей { 5x ≥ −25;  x < −3 }.",
+  "options": [
+   "(−∞; +∞)",
+   "[−5; −3)",
+   "(−5; −3]",
+   "(−∞; −5) ∪ [−3; +∞)"
+  ],
+  "answer": 1,
+  "explanation": "Перша нерівність: [−5; +∞)."
+ },
+ {
+  "id": "it037",
+  "topic": "functions",
+  "topic_name": "Функції",
+  "subtopic": "domain",
+  "subtopic_name": "Область визначення",
+  "difficulty": 2.0,
+  "template": "domain",
+  "params": {
+   "level": 2,
+   "r1": 1,
+   "r2": 5
+  },
+  "question": "Знайдіть область визначення функції y = √(x² − 6x + 5).",
+  "options": [
+   "(−∞; 1) ∪ (5; +∞)",
+   "(−∞; 1] ∪ [5; +∞)",
+   "(1; 5)",
+   "[1; 5]"
+  ],
+  "answer": 1,
+  "explanation": "Під коренем ≥ 0. Корені квадратного тричлена: 1 і 5."
+ },
+ {
+  "id": "it038",
+  "topic": "functions",
+  "topic_name": "Функції",
+  "subtopic": "range",
+  "subtopic_name": "Область значень",
+  "difficulty": -2.0,
+  "template": "range",
+  "params": {
+   "level": -2,
+   "a": 1,
+   "b": 0,
+   "c": -7
+  },
+  "question": "Знайдіть область значень функції y = x² − 7.",
+  "options": [
+   "[0; +∞)",
+   "(−∞; −7]",
+   "[7; +∞)",
+   "[−7; +∞)"
+  ],
+  "answer": 3,
+  "explanation": "Графік — парабола, a = 1, тому гілки напрямлені вгору."
+ },
+ {
+  "id": "it039",
+  "topic": "functions",
+  "topic_name": "Функції",
+  "subtopic": "monotonic",
+  "subtopic_name": "Зростання і спадання",
+  "difficulty": -1.0,
+  "template": "monotonic",
+  "params": {
+   "level": -1,
+   "h": -4,
+   "k": 0,
+   "ask": "up"
+  },
+  "question": "Укажіть проміжок зростання функції y = (x + 4)².",
+  "options": [
+   "[−4; +∞)",
+   "(−∞; 4]",
+   "(−∞; −4]",
+   "[4; +∞)"
+  ],
+  "answer": 0,
+  "explanation": "Парабола, a = 1: гілки вгору; абсциса вершини x₀ = −4."
+ },
+ {
+  "id": "it040",
+  "topic": "functions",
+  "topic_name": "Функції",
+  "subtopic": "linear_func",
+  "subtopic_name": "Лінійна функція і її графік",
+  "difficulty": 0.0,
+  "template": "linear_func",
+  "params": {
+   "level": 0,
+   "k": -2,
+   "b": 1,
+   "x1": 4,
+   "x2": 3
+  },
+  "question": "Графік функції y = kx + b проходить через точки A(4; −7) і B(3; −5). Знайдіть k.",
+  "options": [
+   "−1/2",
+   "1",
+   "−2",
+   "2"
+  ],
+  "answer": 2,
+  "explanation": "k = (y₂ − y₁)/(x₂ − x₁) = (−5 − (−7))/(3 − (4))."
+ },
+ {
+  "id": "it041",
+  "topic": "functions",
+  "topic_name": "Функції",
+  "subtopic": "quadratic_func",
+  "subtopic_name": "Квадратична функція і її графік",
+  "difficulty": 1.0,
+  "template": "quadratic_func",
+  "params": {
+   "level": 1,
+   "r1": -5,
+   "r2": -3
+  },
+  "question": "Знайдіть нулі функції y = x² + 8x + 15.",
+  "options": [
+   "−5 і 3",
+   "3 і 5",
+   "−3 і 5",
+   "−5 і −3"
+  ],
+  "answer": 3,
+  "explanation": "Розв'язуємо x² + px + q = 0. За теоремою Вієта: x₁ + x₂ = −8, x₁·x₂ = 15."
+ },
+ {
+  "id": "it042",
+  "topic": "inequalities",
+  "topic_name": "Нерівності",
+  "subtopic": "linear_ineq",
+  "subtopic_name": "Лінійні нерівності",
+  "difficulty": 2.0,
+  "template": "linear_ineq",
+  "params": {
+   "level": 2,
+   "m": 2,
+   "n": 5,
+   "p": -2,
+   "q": -3,
+   "r": 1,
+   "op": ">"
+  },
+  "question": "Розв'яжіть нерівність (x + 2)/2 − (x − 3)/5 > 1.",
+  "options": [
+   "[−2; +∞)",
+   "(−∞; −2)",
+   "(2; +∞)",
+   "(−2; +∞)"
+  ],
+  "answer": 3,
+  "explanation": "Множимо обидві частини на 10 (це додатне число, знак не змінюється)."
+ },
+ {
+  "id": "it043",
+  "topic": "inequalities",
+  "topic_name": "Нерівності",
+  "subtopic": "quadratic_ineq",
+  "subtopic_name": "Квадратні нерівності",
+  "difficulty": -2.0,
+  "template": "quadratic_ineq",
+  "params": {
+   "level": -2,
+   "lead": 1,
+   "r1": -7,
+   "r2": 7,
+   "op": "<="
+  },
+  "question": "Розв'яжіть нерівність x² ≤ 49.",
+  "options": [
+   "(−7; 7)",
+   "[−6; 8]",
+   "(−∞; −7) ∪ (7; +∞)",
+   "[−7; 7]"
+  ],
+  "answer": 3,
+  "explanation": "Корені тричлена: x₁ = −7, x₂ = 7."
+ },
+ {
+  "id": "it044",
+  "topic": "inequalities",
+  "topic_name": "Нерівності",
+  "subtopic": "interval_method",
+  "subtopic_name": "Метод інтервалів",
+  "difficulty": -1.0,
+  "template": "interval_method",
+  "params": {
+   "level": -1,
+   "num": [
+    0
+   ],
+   "den": [
+    -6
+   ],
+   "op": "<"
+  },
+  "question": "Розв'яжіть методом інтервалів нерівність x/(x + 6) < 0.",
+  "options": [
+   "(−∞; −6] ∪ [0; +∞)",
+   "(−6; 0)",
+   "[−6; 0]",
+   "(0; 6)"
+  ],
+  "answer": 1,
+  "explanation": "Нулі чисельника: 0."
+ },
+ {
+  "id": "it045",
+  "topic": "inequalities",
+  "topic_name": "Нерівності",
+  "subtopic": "ineq_system",
+  "subtopic_name": "Системи нерівностей",
+  "difficulty": 0.0,
+  "template": "ineq_system",
+  "params": {
+   "level": 0,
+   "ask": "set",
+   "ineqs": [
+    {
+     "kind": "lin",
+     "a": 4,
+     "b": -3,
+     "c": -19,
+     "op": ">="
+    },
+    {
+     "kind": "lin",
+     "a": 2,
+     "b": 3,
+     "c": 1,
+     "op": "<="
+    }
+   ]
+  },
+  "question": "Розв'яжіть систему нерівностей { 4x − 3 ≥ −19;  2x + 3 ≤ 1 }.",
+  "options": [
+   "[−4; −1]",
+   "(−4; −1)",
+   "(−∞; −4) ∪ (−1; +∞)",
+   "(−∞; +∞)"
+  ],
+  "answer": 0,
+  "explanation": "Перша нерівність: [−4; +∞)."
+ },
+ {
+  "id": "it046",
+  "topic": "functions",
+  "topic_name": "Функції",
+  "subtopic": "domain",
+  "subtopic_name": "Область визначення",
+  "difficulty": -2.0,
+  "template": "domain",
+  "params": {
+   "level": -2,
+   "a": -6
+  },
+  "question": "Знайдіть область визначення функції y = 1/(x + 6).",
+  "options": [
+   "(−∞; −6) ∪ (−6; +∞)",
+   "(−∞; 6) ∪ (6; +∞)",
+   "{−6}",
+   "(−6; +∞)"
+  ],
+  "answer": 0,
+  "explanation": "На нуль ділити не можна: (x + 6) ≠ 0, тобто x ≠ −6."
+ },
+ {
+  "id": "it047",
+  "topic": "functions",
+  "topic_name": "Функції",
+  "subtopic": "range",
+  "subtopic_name": "Область значень",
+  "difficulty": -1.0,
+  "template": "range",
+  "params": {
+   "level": -1,
+   "a": -1,
+   "b": 0,
+   "c": 1
+  },
+  "question": "Знайдіть область значень функції y = −x² + 1.",
+  "options": [
+   "(−∞; 1]",
+   "(−∞; −1]",
+   "(−∞; 0]",
+   "[1; +∞)"
+  ],
+  "answer": 0,
+  "explanation": "Графік — парабола, a = −1, тому гілки напрямлені вниз."
+ },
+ {
+  "id": "it048",
+  "topic": "functions",
+  "topic_name": "Функції",
+  "subtopic": "monotonic",
+  "subtopic_name": "Зростання і спадання",
+  "difficulty": 0.0,
+  "template": "monotonic",
+  "params": {
+   "level": 0,
+   "a": -1,
+   "h": -3,
+   "k": -4,
+   "ask": "up"
+  },
+  "question": "Укажіть проміжок зростання функції y = −(x + 3)² − 4.",
+  "options": [
+   "(−∞; 3]",
+   "(−∞; −3]",
+   "[3; +∞)",
+   "[−3; +∞)"
+  ],
+  "answer": 1,
+  "explanation": "Парабола, a = −1: гілки вниз; абсциса вершини x₀ = −3."
+ },
+ {
+  "id": "it049",
+  "topic": "functions",
+  "topic_name": "Функції",
+  "subtopic": "linear_func",
+  "subtopic_name": "Лінійна функція і її графік",
+  "difficulty": 1.0,
+  "template": "linear_func",
+  "params": {
+   "level": 1,
+   "k1": 1,
+   "k2": -3,
+   "x0": -1,
+   "y0": 4
+  },
+  "question": "Знайдіть координати точки перетину графіків функцій y = x + 5 і y = −3x + 1.",
+  "options": [
+   "(1; 4)",
+   "(−1; 4)",
+   "(−1; −4)",
+   "(4; −1)"
+  ],
+  "answer": 1,
+  "explanation": "Прирівнюємо: x + 5 = −3x + 1, звідси x = −1."
+ },
+ {
+  "id": "it050",
+  "topic": "functions",
+  "topic_name": "Функції",
+  "subtopic": "quadratic_func",
+  "subtopic_name": "Квадратична функція і її графік",
+  "difficulty": 2.0,
+  "template": "quadratic_func",
+  "params": {
+   "level": 2,
+   "p": 2
+  },
+  "question": "При якому значенні c парабола y = x² + 2x + c має з віссю абсцис рівно одну спільну точку?",
+  "options": [
+   "1",
+   "−1",
+   "2",
+   "0"
+  ],
+  "answer": 0,
+  "explanation": "Одна спільна точка з віссю Ox — це дискримінант D = 0."
+ },
+ {
+  "id": "it051",
+  "topic": "inequalities",
+  "topic_name": "Нерівності",
+  "subtopic": "linear_ineq",
+  "subtopic_name": "Лінійні нерівності",
+  "difficulty": -2.0,
+  "template": "linear_ineq",
+  "params": {
+   "level": -2,
+   "m": -2,
+   "n": -1,
+   "op": "<"
+  },
+  "question": "Розв'яжіть нерівність x − 2 < −1.",
+  "options": [
+   "(−∞; −1)",
+   "(1; +∞)",
+   "(−∞; −3)",
+   "(−∞; 1)"
+  ],
+  "answer": 3,
+  "explanation": "Переносимо доданки з x ліворуч, числа праворуч: x < 1."
+ },
+ {
+  "id": "it052",
+  "topic": "inequalities",
+  "topic_name": "Нерівності",
+  "subtopic": "quadratic_ineq",
+  "subtopic_name": "Квадратні нерівності",
+  "difficulty": -1.0,
+  "template": "quadratic_ineq",
+  "params": {
+   "level": -1,
+   "lead": 1,
+   "r1": -4,
+   "r2": 4,
+   "op": ">"
+  },
+  "question": "Розв'яжіть нерівність x² > 16.",
+  "options": [
+   "(−∞; −4] ∪ [4; +∞)",
+   "(−∞; −4) ∪ (4; +∞)",
+   "[−4; 4]",
+   "(−∞; −3) ∪ (5; +∞)"
+  ],
+  "answer": 1,
+  "explanation": "Корені тричлена: x₁ = −4, x₂ = 4."
+ },
+ {
+  "id": "it053",
+  "topic": "inequalities",
+  "topic_name": "Нерівності",
+  "subtopic": "interval_method",
+  "subtopic_name": "Метод інтервалів",
+  "difficulty": 0.0,
+  "template": "interval_method",
+  "params": {
+   "level": 0,
+   "num": [
+    1
+   ],
+   "den": [
+    3
+   ],
+   "op": ">="
+  },
+  "question": "Розв'яжіть методом інтервалів нерівність (x − 1)/(x − 3) ≥ 0.",
+  "options": [
+   "(1; 3]",
+   "(−∞; 1] ∪ (3; +∞)",
+   "(−∞; 1) ∪ [3; +∞)",
+   "(−∞; 1] ∪ [3; +∞)"
+  ],
+  "answer": 1,
+  "explanation": "Нулі чисельника: 1."
+ },
+ {
+  "id": "it054",
+  "topic": "inequalities",
+  "topic_name": "Нерівності",
+  "subtopic": "ineq_system",
+  "subtopic_name": "Системи нерівностей",
+  "difficulty": 1.0,
+  "template": "ineq_system",
+  "params": {
+   "level": 1,
+   "ask": "count",
+   "ineqs": [
+    {
+     "kind": "lin",
+     "a": -3,
+     "b": -1,
+     "c": 2,
+     "op": "<="
+    },
+    {
+     "kind": "lin",
+     "a": 3,
+     "b": -4,
+     "c": -1,
+     "op": "<"
+    }
+   ]
+  },
+  "question": "Скільки цілих розв'язків має система нерівностей { −3x − 1 ≤ 2;  3x − 4 < −1 }?",
+  "options": [
+   "3",
+   "1",
+   "4",
+   "2"
+  ],
+  "answer": 3,
+  "explanation": "Перша нерівність: [−1; +∞)."
+ },
+ {
+  "id": "it055",
+  "topic": "functions",
+  "topic_name": "Функції",
+  "subtopic": "domain",
+  "subtopic_name": "Область визначення",
+  "difficulty": -1.0,
+  "template": "domain",
+  "params": {
+   "level": -1,
+   "a": 3
+  },
+  "question": "Знайдіть область визначення функції y = √(x − 3).",
+  "options": [
+   "[3; +∞)",
+   "[−3; +∞)",
+   "(−∞; 3]",
+   "(3; +∞)"
+  ],
+  "answer": 0,
+  "explanation": "Під коренем має бути невід'ємне число: (x − 3) ≥ 0, отже x ≥ 3."
+ },
+ {
+  "id": "it056",
+  "topic": "functions",
+  "topic_name": "Функції",
+  "subtopic": "range",
+  "subtopic_name": "Область значень",
+  "difficulty": 0.0,
+  "template": "range",
+  "params": {
+   "level": 0,
+   "h": 5,
+   "k": -5
+  },
+  "question": "Знайдіть область значень функції y = (x − 5)² − 5.",
+  "options": [
+   "[20; +∞)",
+   "[5; +∞)",
+   "[−5; +∞)",
+   "(−∞; −5]"
+  ],
+  "answer": 2,
+  "explanation": "Графік — парабола, a = 1, тому гілки напрямлені вгору."
+ },
+ {
+  "id": "it057",
+  "topic": "functions",
+  "topic_name": "Функції",
+  "subtopic": "monotonic",
+  "subtopic_name": "Зростання і спадання",
+  "difficulty": 1.0,
+  "template": "monotonic",
+  "params": {
+   "level": 1,
+   "a": 1,
+   "b": -6,
+   "c": 3,
+   "ask": "down"
+  },
+  "question": "Укажіть проміжок спадання функції y = x² − 6x + 3.",
+  "options": [
+   "[3; +∞)",
+   "[−3; +∞)",
+   "(−∞; 3]",
+   "(−∞; −3]"
+  ],
+  "answer": 2,
+  "explanation": "Парабола, a = 1: гілки вгору; абсциса вершини x₀ = 3."
+ },
+ {
+  "id": "it058",
+  "topic": "functions",
+  "topic_name": "Функції",
+  "subtopic": "linear_func",
+  "subtopic_name": "Лінійна функція і її графік",
+  "difficulty": 2.0,
+  "template": "linear_func",
+  "params": {
+   "level": 2,
+   "k": 2,
+   "c": 0,
+   "x0": 1,
+   "y0": -2
+  },
+  "question": "Задайте формулою лінійну функцію, графік якої паралельний прямій y = 2x і проходить через точку M(1; −2).",
+  "options": [
+   "y = 2x − 3",
+   "y = 2x",
+   "y = −2x − 4",
+   "y = 2x − 4"
+  ],
+  "answer": 3,
+  "explanation": "Паралельні прямі мають однаковий кутовий коефіцієнт: k = 2."
+ },
+ {
+  "id": "it059",
+  "topic": "functions",
+  "topic_name": "Функції",
+  "subtopic": "quadratic_func",
+  "subtopic_name": "Квадратична функція і її графік",
+  "difficulty": -2.0,
+  "template": "quadratic_func",
+  "params": {
+   "level": -2,
+   "h": -4,
+   "k": 4
+  },
+  "question": "Знайдіть координати вершини параболи y = (x + 4)² + 4.",
+  "options": [
+   "(4; −4)",
+   "(4; 4)",
+   "(−4; −4)",
+   "(−4; 4)"
+  ],
+  "answer": 3,
+  "explanation": "Для y = (x − h)² + k вершина — точка (h; k). Увага: у дужці стоїть «x мінус h»."
+ },
+ {
+  "id": "it060",
+  "topic": "inequalities",
+  "topic_name": "Нерівності",
+  "subtopic": "linear_ineq",
+  "subtopic_name": "Лінійні нерівності",
+  "difficulty": -1.0,
+  "template": "linear_ineq",
+  "params": {
+   "level": -1,
+   "k": 4,
+   "n": 12,
+   "op": ">"
+  },
+  "question": "Розв'яжіть нерівність 4x > 12.",
+  "options": [
+   "(−∞; 3)",
+   "(3; +∞)",
+   "[3; +∞)",
+   "(−3; +∞)"
+  ],
+  "answer": 1,
+  "explanation": "Переносимо доданки з x ліворуч, числа праворуч: 4x > 12."
+ }
+]
