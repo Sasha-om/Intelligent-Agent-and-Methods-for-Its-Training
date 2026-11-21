@@ -295,3 +295,18 @@ def test_answer_time_is_normalised_by_difficulty() -> None:
     env.reset()
     info = env.step(A["harder"])[3]
     assert env.times[-1] == pytest.approx(90.0 / (2 - info["p_hat"]))
+
+
+def test_peek_and_level_if_are_read_only() -> None:
+    """peek_subtopic і level_if показують наступне завдання і нічого не змінюють; step дає саме його."""
+    st = FakeStudent(_ok(3))
+    env = _env(st)
+    env.reset()
+    env.step(A["same"])
+    pointer, sub = env.pointer, env.peek_subtopic()
+    levels = {a: env.level_if(A[a]) for a in ("easier", "same", "harder")}
+    assert env.pointer == pointer and levels["easier"] <= levels["same"] <= levels["harder"]
+    env.step(A["harder"])
+    assert st.asked[-1] == (sub, levels["harder"])
+    with pytest.raises(ValueError):
+        env.level_if(A["short_break"])

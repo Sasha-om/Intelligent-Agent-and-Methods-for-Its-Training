@@ -149,7 +149,14 @@ SIM_MIN_FATIGUE_RATE = 0.005  # швидкість втоми не може бу
 EVAL_STUDENTS_PER_TYPE = 500   # не менше 500 віртуальних учнів на тип (вимога плану)
 BOOTSTRAP_SAMPLES = 2000       # скільки повторів у bootstrap-тесті
 CI_LEVEL = 0.95                # 95 % довірчий інтервал
-STRATEGIES = ("random", "staircase", "cat", "q_agent")
+STRATEGIES = ("random", "staircase", "cat", "rule_6", "rule_5", "q_agent")   # етап 8: + правила з перервою
+ABLATIONS = {"none": {}, "no_fatigue": {"use_fatigue": False},          # абляції: що ховаємо від агента
+             "no_self_report": {"use_self_report": False}, "no_break": {"allow_break": False}}
+ROBUSTNESS = {                                                          # стійкість: інші припущення симулятора
+    "втома ×1,5": {"fatigue_scale": 1.5},
+    "шум самооцінки ×2": {"SIM_SELF_REPORT_NOISE": 1.6},
+    "зона навчання 0,4–0,9": {"SIM_LEARN_LOW": 0.4, "SIM_LEARN_HIGH": 0.9},
+}
 
 # ----------------------------------------------------------------------------- застосунок і приватність
 CHECKIN_QUESTIONS = {"mood": "Настрій", "energy": "Енергія", "sleep": "Сон"}   # шкала 1–5, добровільно
