@@ -132,9 +132,11 @@ class AdaptiveEnv:
         return encode_state(p["ability"], p["fatigue"], p["accuracy"], p["self_report"])
 
     def valid_actions(self) -> list:
-        """Дозволені дії: перерва — лише якщо дозволена і ще не вичерпано MAX_BREAKS."""
+        """Дозволені дії: перерва — лише якщо дозволена, не вичерпано MAX_BREAKS і після останньої перерви
+        (або початку сесії) було хоча б MIN_ITEMS_BEFORE_BREAK завдань."""
         actions = list(range(config.N_ACTIONS))
-        if not self.allow_break or self.breaks >= config.MAX_BREAKS:
+        too_soon = self.since_break < config.MIN_ITEMS_BEFORE_BREAK
+        if not self.allow_break or self.breaks >= config.MAX_BREAKS or too_soon:
             actions.remove(BREAK)
         return actions
 
