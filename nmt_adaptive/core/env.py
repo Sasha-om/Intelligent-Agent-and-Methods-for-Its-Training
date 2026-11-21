@@ -179,10 +179,9 @@ class AdaptiveEnv:
         if name == "review_weak_topic":
             subtopic = self._review_subtopic()
         else:
-            subtopic = self.subtopics[self.pointer % len(self.subtopics)]
+            subtopic = self.peek_subtopic()
             self.pointer += 1
-        base = int(target_level_for(self.estimator.theta_blended(subtopic)))
-        self.level = max(MIN_LEVEL, min(MAX_LEVEL, base + {"easier": -1, "harder": 1}.get(name, 0)))
+        self.level = self._level(subtopic, name)
         item = {"subtopic": subtopic, "difficulty": float(self.level)}
         if self.item_factory is not None:
             item = self.item_factory(subtopic, self.level, self.rng)
@@ -190,6 +189,22 @@ class AdaptiveEnv:
         self.pending = {"action": action, "item": item, "fatigue_before": fatigue_before,
                         "p_hat": self.estimator.p_hat_blended(subtopic, self.level), "potential": self._potential()}
         return item
+
+    def peek_subtopic(self) -> str:
+        """Підтема, яку отримають easier/same/harder на наступному кроці (лише читання, без змін)."""
+        return self.subtopics[self.pointer % len(self.subtopics)]
+
+    def _level(self, subtopic: str, name: str) -> int:
+        """Рівень завдання: рівень «під учня» (p̂ ≈ 0,7) для підтеми ± 1 залежно від дії, у межах −2…2."""
+        base = int(target_level_for(self.estimator.theta_blended(subtopic)))
+        return max(MIN_LEVEL, min(MAX_LEVEL, base + {"easier": -1, "harder": 1}.get(name, 0)))
+
+    def level_if(self, action: int) -> int:
+        """Який рівень дасть дія easier/same/harder на наступному кроці (лише читання; для базових стратегій)."""
+        name = config.ACTIONS[action]
+        if name not in ("easier", "same", "harder"):
+            raise ValueError("level_if — лише для easier/same/harder")
+        return self._level(self.peek_subtopic(), name)
 
     def _review_subtopic(self) -> str:
         """Найслабша підтема за змішаною θ̂; ту саму — не більше REVIEW_MAX_REPEAT разів поспіль."""

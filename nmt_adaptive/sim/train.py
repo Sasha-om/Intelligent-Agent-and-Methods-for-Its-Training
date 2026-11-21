@@ -26,8 +26,7 @@ from sim.student_sim import VirtualStudent
 matplotlib.use("Agg")                       # без вікна: лише файли PNG
 import matplotlib.pyplot as plt  # noqa: E402
 
-ABLATIONS = {"none": {}, "no_fatigue": {"use_fatigue": False},
-             "no_self_report": {"use_self_report": False}, "no_break": {"allow_break": False}}
+ABLATIONS = config.ABLATIONS
 NO_BREAK = [i for i, a in enumerate(config.ACTIONS) if a != "short_break"]
 ACTION_UA = {"easier": "легше", "same": "те саме", "harder": "складніше",
              "review_weak_topic": "повторення", "short_break": "перерва"}
