@@ -30,9 +30,14 @@ class QAgent:
 
     def __init__(self, rng: np.random.Generator, alpha: float = config.ALPHA, gamma: float = config.GAMMA,
                  eps_start: float = config.EPS_START, eps_end: float = config.EPS_END,
-                 decay_episodes: int | None = None) -> None:
-        """rng — генератор випадковості; decay_episodes — за скільки сесій ε спадає до eps_end."""
-        self.rng = rng
+                 decay_episodes: int | None = None, alpha_mode: str = config.ALPHA_MODE) -> None:
+        """rng — генератор випадковості; decay_episodes — за скільки сесій ε спадає до eps_end.
+
+        alpha_mode: "const" — сталий крок alpha; "visits" — крок зменшується з кількістю оновлень пари (s, a).
+        """
+        if alpha_mode not in ("const", "visits"):
+            raise ValueError(f"alpha_mode має бути 'const' або 'visits', а не {alpha_mode!r}")
+        self.rng, self.alpha_mode = rng, alpha_mode
         self.alpha, self.gamma = alpha, gamma
         self.eps_start, self.eps_end = eps_start, eps_end
         default_decay = int(config.EPS_DECAY_SHARE * config.TRAIN_EPISODES)
@@ -114,9 +119,19 @@ class QAgent:
             return 0.0
         future = 0.0 if done else float(np.max(self.q[s_next, self._valid(valid_next)]))
         td_error = r + self.gamma * future - self.q[s, a]
-        self.q[s, a] += self.alpha * td_error
+        self.q[s, a] += self.step_size(s, a) * td_error
         self.visits[s, a] += 1
         return float(td_error)
+
+    def step_size(self, s: int, a: int) -> float:
+        """Крок навчання α для пари (s, a): сталий або α = max(ALPHA_MIN, 1/(1 + N(s,a))^ALPHA_POWER).
+
+        Навіщо зменшувати: перші оновлення пари мають сильно змінювати Q (ще нічого не відомо), а пізніші —
+        лише уточнювати, інакше Q «тремтить» від випадкових відповідей учнів (рев'ю етапу 6, заміри етапу 7).
+        """
+        if self.alpha_mode == "const":
+            return self.alpha
+        return max(config.ALPHA_MIN, (1.0 + self.visits[s, a]) ** -config.ALPHA_POWER)
 
     def freeze(self) -> None:
         """Заморожена політика (для застосунку з живими учнями): ε = 0, таблиця більше не змінюється."""
@@ -124,18 +139,22 @@ class QAgent:
 
     def params(self) -> dict:
         """Параметри агента — для журналів, CSV і звітів."""
-        return {"alpha": self.alpha, "gamma": self.gamma, "eps_start": self.eps_start, "eps_end": self.eps_end,
+        return {"alpha": self.alpha, "alpha_mode": self.alpha_mode, "alpha_power": config.ALPHA_POWER,
+                "alpha_min": config.ALPHA_MIN, "gamma": self.gamma, "eps_start": self.eps_start, "eps_end": self.eps_end,
                 "decay_episodes": self.decay_episodes, "epsilon": self.epsilon(), "episodes": self.episodes,
                 "frozen": self.frozen}
 
     # ------------------------------------------------------------------ збереження
-    def save(self, path: Path) -> Path:
-        """Зберігає таблицю й параметри в JSON (UTF-8). Числа — з повною точністю."""
+    def save(self, path: Path, meta: dict | None = None) -> Path:
+        """Зберігає таблицю й параметри в JSON (UTF-8). Числа — з повною точністю.
+
+        meta — довідкові поля (seed, абляція, кількість сесій), щоб було видно, звідки політика.
+        """
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         data = {"format": FORMAT, "actions": list(config.ACTIONS), "n_states": config.N_STATES,
-                "params": self.params(), "episodes": self.episodes, "q": self.q.tolist(),
-                "visits": self.visits.tolist()}
+                "params": self.params(), "episodes": self.episodes, "meta": meta or {},
+                "q": self.q.tolist(), "visits": self.visits.tolist()}
         path.write_text(json.dumps(data, ensure_ascii=False, allow_nan=False), encoding="utf-8")
         return path
 
@@ -145,7 +164,8 @@ class QAgent:
         data = json.loads(Path(path).read_text(encoding="utf-8"))
         q, visits = _checked_tables(data, path)
         p = data["params"]
-        agent = cls(rng, p["alpha"], p["gamma"], p["eps_start"], p["eps_end"], p["decay_episodes"])
+        agent = cls(rng, p["alpha"], p["gamma"], p["eps_start"], p["eps_end"], p["decay_episodes"],
+                    p.get("alpha_mode", "const"))
         agent.q, agent.visits, agent.episodes = q, visits, data["episodes"]
         agent.freeze()
         return agent

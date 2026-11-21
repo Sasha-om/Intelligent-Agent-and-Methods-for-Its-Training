@@ -14,6 +14,7 @@ ALPHA, GAMMA = config.ALPHA, config.GAMMA
 def _agent(seed: int = 0, **kw: object) -> QAgent:
     """Агент з фіксованим seed і коротким спадом ε (10 сесій) для тестів."""
     kw.setdefault("decay_episodes", 10)
+    kw.setdefault("alpha_mode", "const")                             # ручні формули — зі сталим α
     return QAgent(np.random.default_rng(seed), **kw)
 
 
@@ -85,6 +86,7 @@ def test_default_decay_follows_config() -> None:
     """За замовчуванням ε спадає протягом EPS_DECAY_SHARE × TRAIN_EPISODES сесій."""
     agent = QAgent(np.random.default_rng(0))
     assert agent.decay_episodes == int(config.EPS_DECAY_SHARE * config.TRAIN_EPISODES)
+    assert agent.alpha_mode == config.ALPHA_MODE
 
 
 def test_same_seed_same_choices() -> None:
@@ -226,3 +228,25 @@ def test_learns_best_action_on_toy_problem() -> None:
         agent.end_episode()
     assert agent.greedy_action(0) == 2 and agent.greedy_action(1) == 4
     assert agent.q[0, 2] == pytest.approx(1.0 + GAMMA * 2.0, abs=0.05)
+
+
+def test_visit_based_step_size() -> None:
+    """Режим "visits": α = max(ALPHA_MIN, 1/(1+N)^ALPHA_POWER); перше оновлення пари — повний крок (Q = ціль)."""
+    agent = _agent(alpha_mode="visits")
+    agent.update(0, 1, 2.0, 1, done=True)
+    assert agent.q[0, 1] == pytest.approx(2.0)
+    expected = (1 + 1) ** -config.ALPHA_POWER
+    assert agent.step_size(0, 1) == pytest.approx(expected)
+    agent.update(0, 1, 0.0, 1, done=True)
+    assert agent.q[0, 1] == pytest.approx(2.0 - expected * 2.0)
+    agent.visits[0, 1] = 10**6
+    assert agent.step_size(0, 1) == config.ALPHA_MIN
+    with pytest.raises(ValueError):
+        _agent(alpha_mode="magic")
+
+
+def test_alpha_mode_saved_and_loaded(tmp_path) -> None:
+    """Режим кроку зберігається в JSON і відновлюється."""
+    agent = _agent(alpha_mode="visits")
+    loaded = QAgent.load(agent.save(tmp_path / "p.json"), np.random.default_rng(0))
+    assert loaded.alpha_mode == "visits"

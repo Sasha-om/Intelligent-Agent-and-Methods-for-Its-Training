@@ -167,8 +167,12 @@ def test_break_action() -> None:
     state, reward, done, info = env.step(A["short_break"])
     assert st.breaks == 1 and env.state_parts()["fatigue"] == 0 and decode_state(state)[3] == 0
     assert reward == 0 and not done and info["item"] is None
-    env.step(A["short_break"]); env.step(A["short_break"])
-    assert A["short_break"] not in env.valid_actions()
+    assert A["short_break"] not in env.valid_actions()                # дві перерви поспіль — не можна
+    for _ in range(2):
+        env.step(A["same"])
+        env.step(A["short_break"])
+    env.step(A["same"])
+    assert A["short_break"] not in env.valid_actions()                # 3 перерви вичерпано
     with pytest.raises(ValueError):
         env.step(A["short_break"])
 
@@ -218,12 +222,14 @@ def test_session_ends_after_20_items_with_gain_bonus() -> None:
     st = FakeStudent(_ok(20))
     env = _env(st, gain_source="true")
     env.reset()
-    env.step(A["short_break"])
+    assert A["short_break"] not in env.valid_actions()                # на самому старті перерва недоступна
     bonuses = []
     for i in range(20):
         _s, _r, done, info = env.step(A["same"])
         bonuses.append(info["reward_parts"]["gain"])
         assert done == (i == 19)
+        if i == 0:
+            assert env.step(A["short_break"])[3]["reward_parts"]["gain"] == 0
     gain = sum(st.theta.values()) / len(st.theta)                   # старт 0 → кінець
     assert sum(bonuses) == pytest.approx(config.R_GAIN_COEF * gain)
     assert bonuses[0] == pytest.approx(config.R_GAIN_COEF * 0.1 / 9)   # крок «правильно» → θ підтеми +0,1
