@@ -152,3 +152,42 @@ def test_best_level_for() -> None:
     assert best_level_for(-9.0) == -2.0
     assert best_level_for(-0.6) == -1.0
     assert math.isclose(best_level_for(0.5), 0.0) or math.isclose(best_level_for(0.5), 1.0)
+
+
+# ----------------------------------------------------------------------------- загальна і змішана оцінка (етап 5)
+def test_general_theta_updates_on_every_answer() -> None:
+    """Загальна θ̂ змінюється після відповіді з будь-якої підтеми за тією ж формулою Elo."""
+    est = AbilityEstimator()
+    p0 = p_correct(est.general(), 1.0)
+    est.update("domain", 1.0, True)
+    assert est.general() == pytest.approx(config.ELO_K * (1 - p0))
+    before = est.general()
+    est.update("range", 1.0, False)
+    assert est.general() < before
+
+
+def test_blended_theta_moves_from_general_to_subtopic() -> None:
+    """Без відповідей з підтеми змішана θ̂ = загальна; з відповідями вага підтеми n/(n+M) зростає."""
+    est = AbilityEstimator()
+    for _ in range(4):
+        est.update("domain", 2.0, True)                   # загальна θ̂ зросла
+    assert est.theta_blended("range") == pytest.approx(est.general())
+    n, m = est.answers("domain"), config.ABILITY_BLEND_M
+    expected = n / (n + m) * est.theta("domain") + m / (n + m) * est.general()
+    assert est.theta_blended("domain") == pytest.approx(expected)
+
+
+def test_p_hat_blended_uses_blended_theta() -> None:
+    """p̂ для нагороди рахується зі змішаної θ̂."""
+    est = AbilityEstimator()
+    est.update("domain", 0.0, True)
+    assert est.p_hat_blended("range", 0.5) == pytest.approx(p_correct(est.theta_blended("range"), 0.5))
+
+
+def test_general_theta_clipped_and_in_snapshot() -> None:
+    """Загальна θ̂ теж обмежена шкалою і не впливає на snapshot підтем."""
+    est = AbilityEstimator()
+    for _ in range(100):
+        est.update("domain", 2.0, True)
+    assert est.general() == pytest.approx(config.THETA_MAX)
+    assert set(est.snapshot()) == set(config.SUBTOPICS)

@@ -39,6 +39,16 @@ def best_level_for(theta: float) -> float:
     return min(config.DIFFICULTY_LEVELS, key=lambda level: (abs(level - theta), level))
 
 
+def target_level_for(theta: float, p: float = config.ZPD_TARGET_P) -> float:
+    """Рівень «під учня»: найближчий до складності, на якій учень із theta відповість з імовірністю p.
+
+    Зона розвитку несиметрична (θ − b від −0,09 до 0,67), тому ціль — p ≈ 0,7, а не θ = b.
+    З формули 3PL: b* = θ − logit((p − c)/(1 − c)) / a.
+    """
+    q = (p - config.GUESS_C) / (1.0 - config.GUESS_C)
+    return best_level_for(theta - math.log(q / (1.0 - q)) / config.IRT_A)
+
+
 def _clip(value: float) -> float:
     """Обмежити θ̂ межами шкали, щоб оцінка не «втекла» після довгої серії."""
     return max(config.THETA_MIN, min(config.THETA_MAX, value))
@@ -54,6 +64,7 @@ class AbilityEstimator:
         self._theta = {s: float(prior) for s in self._order}
         self._answers = {s: 0 for s in self._order}
         self._prior = float(prior)
+        self._general = float(prior)       # загальна θ̂ учня: оновлюється після КОЖНОЇ відповіді
         self._k = k
 
     def _check(self, subtopic: str) -> None:
@@ -78,10 +89,29 @@ class AbilityEstimator:
     def update(self, subtopic: str, b: float, correct: bool) -> float:
         """Оновлює θ̂ після відповіді. Повертає p̂ ДО оновлення — саме вона йде в нагороду агента."""
         p_before = self.p_hat(subtopic, b)
-        surprise = (1.0 if correct else 0.0) - p_before
-        self._theta[subtopic] = _clip(self._theta[subtopic] + self._k * surprise)
+        y = 1.0 if correct else 0.0
+        self._theta[subtopic] = _clip(self._theta[subtopic] + self._k * (y - p_before))
+        self._general = _clip(self._general + self._k * (y - p_correct(self._general, b)))
         self._answers[subtopic] += 1
         return p_before
+
+    def general(self) -> float:
+        """Загальна θ̂ учня (по всіх підтемах разом). Іде в «рівень знань» стану агента."""
+        return self._general
+
+    def theta_blended(self, subtopic: str, m: int = config.ABILITY_BLEND_M) -> float:
+        """Змішана θ̂ підтеми: поки відповідей з неї мало, більше довіряємо загальній θ̂.
+
+        θ = w·θ̂_підтеми + (1 − w)·θ̂_загальна,  w = n / (n + m),  n — відповідей з підтеми.
+        Навіщо: за сесію з однієї підтеми лише 2–3 відповіді, і її власна θ̂ майже не відходить від 0.
+        """
+        n = self.answers(subtopic)
+        w = n / (n + m)
+        return w * self._theta[subtopic] + (1.0 - w) * self._general
+
+    def p_hat_blended(self, subtopic: str, b: float) -> float:
+        """p̂ зі змішаної θ̂ — саме вона йде в нагороду агента за зону розвитку."""
+        return p_correct(self.theta_blended(subtopic), b)
 
     def _answered(self) -> list:
         """Підтеми, з яких уже була хоч одна відповідь (у порядку config)."""
@@ -104,6 +134,18 @@ class AbilityEstimator:
         if not answered:
             return rng.choice(self._order) if rng is not None else self._order[0]
         return min(answered, key=lambda s: (self._theta[s], self._order.index(s)))
+
+    def weakest_blended(self, rng: random.Random | None = None, exclude: str | None = None) -> str:
+        """Найслабша підтема за ЗМІШАНОЮ θ̂ серед УСІХ підтем (без відповідей — загальна θ̂).
+
+        На відміну від weakest_subtopic, не «залипає» на першій підтемі з відповіддю.
+        exclude — підтема, яку не можна брати (щоб не повторювати одну тему без кінця);
+        рівні значення розв'язує rng (або порядок config, якщо rng немає).
+        """
+        options = [s for s in self._order if s != exclude]
+        lowest = min(self.theta_blended(s) for s in options)
+        ties = [s for s in options if math.isclose(self.theta_blended(s), lowest)]
+        return rng.choice(ties) if rng is not None else ties[0]
 
     def snapshot(self) -> dict:
         """Копія всіх θ̂ (для бази даних, підсумку сесії й метрик)."""
