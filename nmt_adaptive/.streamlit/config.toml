@@ -1,0 +1,6 @@
+# Налаштування Streamlit для nmt_adaptive (діють, коли запускаємо з папки nmt_adaptive).
+[browser]
+gatherUsageStats = false   # не надсилати статистику використання Streamlit в інтернет
+
+[server]
+address = "localhost"      # сторінки відкриваються лише на цьому комп'ютері, не з мережі школи

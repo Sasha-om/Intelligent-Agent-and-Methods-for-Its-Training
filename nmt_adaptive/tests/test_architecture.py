@@ -40,3 +40,24 @@ def test_core_never_imports_streamlit() -> None:
 def test_core_files_are_found() -> None:
     """Тест вище справді щось перевіряє (а не порожній список файлів)."""
     assert len(_core_files()) >= 3
+
+
+def test_streamlit_only_in_app_pages() -> None:
+    """Streamlit імпортують лише сторінки app_*.py; сховище й логіка сесії (app/storage.py, app/session.py) — ні."""
+    app_files = sorted((config.BASE_DIR / "app").glob("*.py"))
+    with_streamlit = {p.name for p in app_files if "streamlit" in _imported_modules(p)}
+    assert with_streamlit == {"app_student.py", "app_teacher.py"}
+
+
+def test_tests_do_not_touch_real_student_db() -> None:
+    """Тести не відкривають справжню базу data/students/ (лише tmp_path)."""
+    offenders = [p.name for p in (config.BASE_DIR / "tests").glob("test_*.py")
+                 if p.name != "test_architecture.py" and "storage.connect()" in p.read_text(encoding="utf-8")]
+    assert offenders == []
+
+
+def test_streamlit_privacy_settings() -> None:
+    """.streamlit/config.toml: без статистики в інтернет і лише localhost."""
+    import tomllib
+    settings = tomllib.loads((config.BASE_DIR / ".streamlit" / "config.toml").read_text(encoding="utf-8"))
+    assert settings["browser"]["gatherUsageStats"] is False and settings["server"]["address"] == "localhost"
