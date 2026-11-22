@@ -139,9 +139,16 @@ def next_step() -> None:
 
 # ----------------------------------------------------------------------------- 4–6. завдання, розбір, рішення агента
 def show_decision() -> None:
-    """Рішення агента простою мовою + що він урахував."""
+    """Рішення агента: що далі (жирним), чому (факти) і, за бажанням, стан, з якого він обирав."""
     decision = st.session_state.live.decision
-    st.info(f"🤖 {decision['text']}\n\n{decision['reason']}")
+    st.info(f"**{decision['text']}**\n\n{decision['reason']}", icon="🤖")
+    with st.expander("Як агент це вирішив?"):
+        if decision["fallback"]:
+            st.write("Такої ситуації агент у навчанні не бачив, тому діє просте запасне правило. Він бачив:")
+        else:
+            st.write("Агент бачить 4 речі і для кожної ситуації має вивчену найкращу дію "
+                     f"(навчався на {config.TRAIN_EPISODES:,} сесіях з віртуальними учнями):".replace(",", " "))
+        st.markdown("\n".join(f"- {label}: **{value}**" for label, value in decision["state_view"]))
 
 
 def page_task() -> None:
@@ -182,7 +189,7 @@ def page_feedback() -> None:
     if fb["correct"]:
         st.success(f"✅ Правильно! {fb['text']}")
     else:
-        st.error(f"❌ Помилка. Правильна відповідь: {fb['answer']}")
+        st.error(f"❌ Помилка. Твоя відповідь: {fb['chosen']}. Правильна: **{fb['answer']}**")
         st.markdown("**Розв'язок:**\n" + "\n".join(f"{i}. {s}" for i, s in enumerate(fb["steps"], 1)))
         st.warning(f"Типова помилка: {fb['typical_error']}")
     if st.session_state.live.done:

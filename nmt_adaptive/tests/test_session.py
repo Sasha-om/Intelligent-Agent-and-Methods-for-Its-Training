@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 import config
-from app.session import ItemPicker, LiveSession, LiveStudent, Stopwatch, feedback, items_word, reason_text
+from app.session import ItemPicker, LiveSession, LiveStudent, Stopwatch, feedback
 from core.agent import QAgent
 from core.env import BREAK, AdaptiveEnv
 from core.items import load_bank, solve
@@ -98,6 +98,7 @@ def test_wrong_answer_gets_steps(agent, bank) -> None:
     wrong = (item["answer"] + 1) % len(item["options"])
     fb = session.answer(wrong)["feedback"]
     assert fb["correct"] is False and fb["steps"] == solve(item)["steps"] and fb["typical_error"]
+    assert fb["chosen"] == item["options"][wrong]
     assert fb["answer"] == item["options"][item["answer"]]
     assert feedback(item, True) == {"correct": True, "text": item["explanation"]}
 
@@ -154,24 +155,6 @@ def test_live_student_report_once() -> None:
     assert student.self_report() == 2 and student.self_report() is None
 
 
-def test_reason_text_uses_facts(agent, bank) -> None:
-    """Пояснення будується з фактів: на старті — «починаємо», далі — «правильно X з Y останніх»."""
-    env = AdaptiveEnv(LiveStudent({}), random.Random(0))
-    env.reset()
-    assert reason_text(env).startswith("Починаємо")
-    session = LiveSession(agent, bank, {"energy": 4}, seed=6, clock=FakeClock())
-    _until_item(session)
-    session.answer(session.item["answer"])
-    text = reason_text(session.env)
-    assert "правильно 1 з 1 останніх" in text and "енергія — 4 з 5" in text and "1 завдання" in text
-
-
-def test_items_word() -> None:
-    """Відмінювання слова «завдання»."""
-    assert [items_word(n) for n in (1, 2, 4, 5, 11, 12, 21, 22, 25)] == [
-        "завдання", "завдання", "завдання", "завдань", "завдань", "завдань", "завдання", "завдання", "завдань"]
-
-
 def test_frozen_agent_never_learns(agent, bank) -> None:
     """Після сесії Q-таблиця агента не змінилась."""
     before = agent.q.copy()
@@ -190,8 +173,9 @@ def test_decision_text_is_plain(agent, bank) -> None:
         first = session.decide()
         if first["action"] == "review_weak_topic":
             assert first["text"].startswith("Починаємо з теми «") and "найслабша" not in first["text"]
-        else:
-            assert first["text"] == config.ACTION_TEXT_UA[first["action"]]
+        elif first["action"] != "short_break":
+            assert first["text"].startswith(config.ACTION_TEXT_UA[first["action"]])
+        assert session.item is None or session.item["subtopic_name"] in first["text"]
 
 
 def test_review_text_is_honest(agent, bank) -> None:

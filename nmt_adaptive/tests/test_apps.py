@@ -172,14 +172,25 @@ def test_full_session_closes_itself(db_path) -> None:
     assert _query(db_path, "SELECT COUNT(*) FROM sessions") == [(1,)]
 
 
-def test_teacher_hides_today(db_path) -> None:
-    """Сьогоднішні сесії вчитель не бачить: 3 учні сьогодні → «замало даних»."""
+def test_teacher_sees_finished_today(db_path) -> None:
+    """Сьогоднішні ЗАВЕРШЕНІ сесії вчитель бачить одразу; є адреса для учнів і кнопка «Оновити»."""
     _fill(db_path, 3)
     with closing(storage.connect(db_path)) as conn:
         conn.execute("UPDATE sessions SET started_at = ?", (storage.today() + "T10:00:00+02:00",))
         conn.commit()
     at = _run(AppTest.from_file(TEACHER))
-    assert "Замало даних" in _texts(at) and len(at.metric) == 0
+    assert [m.value for m in at.metric][:2] == ["3", "3"]
+    assert "http://" in _texts(at) and at.button(key="refresh")
+
+
+def test_teacher_hides_unfinished_today(db_path) -> None:
+    """Учень ще розв'язує (сесія не завершена) — його відповідей вчитель не бачить, лише «зараз проходять: 1»."""
+    _fill(db_path, 3)
+    with closing(storage.connect(db_path)) as conn:
+        conn.execute("UPDATE sessions SET started_at = ?, ended_at = NULL", (storage.today() + "T10:00:00+02:00",))
+        conn.commit()
+    at = _run(AppTest.from_file(TEACHER))
+    assert "Замало даних" in _texts(at) and len(at.metric) == 0 and "проходять тест: **3**" in _texts(at)
 
 
 def test_login_with_existing_code(db_path) -> None:

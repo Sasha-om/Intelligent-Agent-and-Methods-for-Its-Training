@@ -16,10 +16,10 @@ import streamlit as st      # noqa: E402
 
 import config               # noqa: E402
 from app import storage     # noqa: E402
+from app.netinfo import class_url   # noqa: E402
 
-
-TODAY_NOTE = ("Сьогоднішні сесії з'являться тут завтра — щоб за зміною чисел не можна було впізнати учня."
-              if config.TEACHER_TODAY_HIDDEN else "")
+FINISHED_NOTE = ("Сесія учня з'являється тут, щойно він її завершить (20 завдань, «Завершити зараз» або «Вийти»)."
+                 if config.TEACHER_UNFINISHED_HIDDEN else "")
 
 
 def percent(value: float | None) -> str:
@@ -58,18 +58,29 @@ def show_topics(agg: dict) -> None:
         st.write(f"- {names[key]} — {percent(accuracy[key])} правильних")
 
 
+def show_class_status() -> None:
+    """Адреса тесту для учнів, скільки зараз проходять тест, кнопка «Оновити»."""
+    with closing(storage.connect()) as conn:
+        active = storage.in_progress_today(conn)
+    left, right = st.columns([3, 1])
+    left.write(f"Адреса тесту для учнів (режим класу): **{class_url()}** · зараз проходять тест: **{active}**")
+    if right.button("🔄 Оновити", key="refresh"):
+        st.rerun()
+
+
 def main() -> None:
     """Точка входу сторінки вчителя."""
     st.set_page_config(page_title="НМТ: вчитель", page_icon="📊")
     st.title("📊 Пілот: загальна картина класу")
     st.caption("Дані пілоту. Це не оцінки учнів.")
+    show_class_status()
     with closing(storage.connect()) as conn:
         agg = storage.class_aggregates(conn)
     if not agg:
-        st.info(f"Замало даних: агрегати з'являться, коли завдання розв'яжуть щонайменше "
-                f"{config.MIN_GROUP_FOR_STATS} учні. {TODAY_NOTE}")
+        st.info(f"Замало даних: результати з'являться, коли тест завершать щонайменше "
+                f"{config.MIN_GROUP_FOR_STATS} учні. {FINISHED_NOTE}")
         return
-    st.write(f"Сесії до {agg['until']} (не включно). {TODAY_NOTE}")
+    st.caption(FINISHED_NOTE)
     show_numbers(agg)
     show_topics(agg)
 

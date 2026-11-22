@@ -61,3 +61,23 @@ def test_streamlit_privacy_settings() -> None:
     import tomllib
     settings = tomllib.loads((config.BASE_DIR / ".streamlit" / "config.toml").read_text(encoding="utf-8"))
     assert settings["browser"]["gatherUsageStats"] is False and settings["server"]["address"] == "localhost"
+    assert settings["server"]["showEmailPrompt"] is False
+
+
+def test_launchers_for_simple_start() -> None:
+    """Подвійний клік: start_test / start_teacher / start_class → launch.bat (venv, requirements, streamlit)."""
+    base = config.BASE_DIR
+    launch = (base / "launch.bat").read_bytes().decode("utf-8")
+    assert "requirements.txt" in launch and "\r\n" in launch
+    assert "app\\app_student.py" in launch and "app\\app_teacher.py" in launch
+    for name, mode in (("start_test.bat", "student"), ("start_teacher.bat", "teacher"), ("start_class.bat", "class")):
+        assert f"launch.bat\" {mode}" in (base / name).read_bytes().decode("utf-8")
+
+
+def test_launcher_ports_match_config() -> None:
+    """Порти в launch.bat збігаються з config; у режимі класу тест відкритий у мережу, сторінка вчителя — ні."""
+    launch = (config.BASE_DIR / "launch.bat").read_bytes().decode("utf-8")
+    class_part = launch.split(":class")[-1]
+    assert f"--server.address 0.0.0.0 --server.port {config.CLASS_PORT}" in class_part
+    teacher_line = next(line for line in class_part.splitlines() if "app_teacher.py" in line)
+    assert f"--server.port {config.TEACHER_PORT}" in teacher_line and "0.0.0.0" not in teacher_line
