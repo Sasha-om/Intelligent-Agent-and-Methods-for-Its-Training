@@ -243,13 +243,19 @@ def test_breaks_logged_and_exported(conn) -> None:
     assert storage.delete_student(conn, code) == 3      # перерва + сесія + учень
 
 
-def test_aggregates_hide_today(conn) -> None:
-    """За замовчуванням вчитель не бачить сьогоднішніх сесій."""
+def test_aggregates_show_finished_today(conn) -> None:
+    """Завершені сьогоднішні сесії вчитель бачить одразу; незавершені — ні (лише з наступного дня)."""
     rng = random.Random(0)
-    for _ in range(3):
-        _session(conn, _student(conn, rng))
-    assert storage.class_aggregates(conn) == {}
-    assert storage.class_aggregates(conn, before=FUTURE)["students"] == 3
+    codes = [_student(conn, rng) for _ in range(3)]
+    for code in codes[:2]:
+        _session(conn, code)
+    sid = storage.start_session(conn, codes[2], None)
+    storage.save_answer(conn, sid, _answer(1))
+    assert storage.class_aggregates(conn) == {}                 # третій ще розв'язує → видно лише 2
+    assert storage.in_progress_today(conn) == 1
+    storage.end_session(conn, sid, dropped=False)
+    agg = storage.class_aggregates(conn)
+    assert agg["students"] == 3 and agg["sessions"] == 3 and storage.in_progress_today(conn) == 0
 
 
 def test_accuracy_is_mean_of_students(conn) -> None:

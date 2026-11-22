@@ -211,11 +211,13 @@ def today() -> str:
     return _now()[:10]
 
 
+VISIBLE = "(s.ended_at IS NOT NULL OR substr(s.started_at, 1, 10) < ?)"   # завершені або з минулих днів
+
+
 def _answers_before(conn: sqlite3.Connection, before: str) -> list:
-    """Відповіді із сесій, що почались ДО дати before (сьогоднішні вчитель не бачить), з кодом учня."""
+    """Відповіді з видимих вчителю сесій (завершені — одразу, незавершені — з дати before), з кодом учня."""
     return conn.execute("SELECT s.code, a.subtopic, a.correct, a.time_sec, a.fallback FROM answers a "
-                        "JOIN sessions s ON s.id = a.session_id WHERE substr(s.started_at, 1, 10) < ?",
-                        (before,)).fetchall()
+                        f"JOIN sessions s ON s.id = a.session_id WHERE {VISIBLE}", (before,)).fetchall()
 
 
 def _mean_of_students(rows: list, field: str) -> float:
@@ -236,10 +238,10 @@ def _accuracy_by_subtopic(rows: list, min_group: int) -> dict:
 
 
 def _session_stats(conn: sqlite3.Connection, min_group: int, before: str) -> dict:
-    """Сесії з відповідями до дати before: кількість, частка недокінчених, середній приріст θ̂ (від ≥ min_group учнів)."""
+    """Видимі сесії з відповідями: кількість, частка недокінчених, середній приріст θ̂ (від ≥ min_group учнів)."""
     rows = conn.execute("SELECT s.code, s.dropped, s.ended_at, s.theta_gain, COUNT(a.id) AS items "
                         "FROM sessions s JOIN answers a ON a.session_id = s.id "
-                        "WHERE substr(s.started_at, 1, 10) < ? GROUP BY s.id", (before,)).fetchall()
+                        f"WHERE {VISIBLE} GROUP BY s.id", (before,)).fetchall()
     dropped = [bool(r["dropped"]) or r["ended_at"] is None for r in rows]
     gains = [r for r in rows if r["ended_at"] is not None and r["theta_gain"] is not None]
     enough = len({r["code"] for r in gains}) >= min_group
@@ -250,12 +252,13 @@ def _session_stats(conn: sqlite3.Connection, min_group: int, before: str) -> dic
 
 def class_aggregates(conn: sqlite3.Connection, min_group: int = config.MIN_GROUP_FOR_STATS,
                      before: str | None = None) -> dict:
-    """Лише агреговані числа класу, без кодів учнів, за сесії ДО дати before (за замовчуванням — до сьогодні).
+    """Лише агреговані числа класу, без кодів учнів. Учнів < min_group → {} (щоб не впізнати людину).
 
-    Учнів < min_group → {} (щоб не впізнати людину). Сьогоднішні сесії сховані: інакше, оновлюючи сторінку
-    до і після відповіді учня, можна побачити його результат за зміною чисел.
+    Завершену сесію вчитель бачить одразу. Незавершену (учень ще розв'язує) — лише з дати before
+    (за замовчуванням — із завтра): інакше, оновлюючи сторінку до і після відповіді, можна було б
+    побачити результат конкретного учня за зміною чисел.
     """
-    before = before or (today() if config.TEACHER_TODAY_HIDDEN else "9999-12-31")
+    before = before or (today() if config.TEACHER_UNFINISHED_HIDDEN else "9999-12-31")
     rows = _answers_before(conn, before)
     students = len({r["code"] for r in rows})
     if students < min_group:
@@ -264,4 +267,10 @@ def class_aggregates(conn: sqlite3.Connection, min_group: int = config.MIN_GROUP
     weak = sorted(accuracy, key=accuracy.get)[:config.TEACHER_WEAK_TOPICS]
     return {"students": students, **_session_stats(conn, min_group, before), "accuracy_by_subtopic": accuracy,
             "weak_topics": weak, "mean_time_sec": _mean_of_students(rows, "time_sec"),
-            "fallback_share": sum(r["fallback"] for r in rows) / len(rows), "until": before}
+            "fallback_share": sum(r["fallback"] for r in rows) / len(rows)}
+
+
+def in_progress_today(conn: sqlite3.Connection) -> int:
+    """Скільки сесій сьогодні почато і ще не завершено (лише кількість, без результатів)."""
+    return conn.execute("SELECT COUNT(*) FROM sessions WHERE ended_at IS NULL AND substr(started_at, 1, 10) = ?",
+                        (today(),)).fetchone()[0]

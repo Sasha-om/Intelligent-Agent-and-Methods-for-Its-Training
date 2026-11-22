@@ -11,7 +11,8 @@ from dataclasses import dataclass
 
 import config
 from core.agent import QAgent
-from core.env import BREAK, AdaptiveEnv, fatigue_level
+from app.explain import headline, state_view, why_text
+from core.env import BREAK, AdaptiveEnv
 from core.items import is_correct, make_item, solve
 
 
@@ -87,46 +88,6 @@ class ItemPicker:
         return item
 
 
-def items_word(n: int) -> str:
-    """«1 завдання», «3 завдання», «5 завдань», «11 завдань», «21 завдання»."""
-    if n % 10 == 0 or n % 10 >= 5 or 11 <= n % 100 <= 14:
-        return "завдань"
-    return "завдання"
-
-
-FALLBACK_TEXT = "Такої ситуації агент у навчанні не бачив, тому діє за простим запасним правилом."
-
-
-def review_text(env: AdaptiveEnv, item: dict) -> str:
-    """Текст для «повторення слабкої теми» — чесно: тема без відповідей не «найслабша», а ще не бачена.
-
-    Викликається після next_item, але до відповіді, тож кількість відповідей у темі — ще стара.
-    """
-    name = item["subtopic_name"]
-    if env.items_done == 0:
-        return f"Починаємо з теми «{name}»."
-    if env.estimator.answers(item["subtopic"]) == 0:
-        return f"Пробуємо тему, якої ще не було: «{name}»."
-    return f"{config.ACTION_TEXT_UA['review_weak_topic']} Тема: «{name}»."
-
-
-def reason_text(env: AdaptiveEnv) -> str:
-    """Що бачив агент, коли обирав дію — простими словами (факти стану, без вигаданих причин)."""
-    facts = []
-    recent = list(env.recent)
-    if recent:
-        facts.append(f"правильно {sum(recent)} з {len(recent)} останніх")
-    if env.since_break:
-        facts.append(f"без перерви — {env.since_break} {items_word(env.since_break)}")
-    if fatigue_level(env.since_break, env.times) > fatigue_level(env.since_break, []):
-        facts.append("відповіді стали повільнішими")
-    if env.self_report is not None:
-        facts.append(f"енергія — {env.self_report} з 5")
-    if not facts:
-        return "Починаємо: агент ще не бачив твоїх відповідей, тому бере рівень за стартовою оцінкою."
-    return "Агент урахував: " + "; ".join(facts) + "."
-
-
 class LiveSession:
     """Одна сесія учня: рішення агента → завдання → відповідь → розбір → … → підсумок."""
 
@@ -146,20 +107,29 @@ class LiveSession:
         return self.env.done
 
     def decide(self) -> dict:
-        """Агент обирає дію. Якщо це завдання — воно готується і запускається секундомір."""
+        """Агент обирає дію. Якщо це завдання — воно готується і запускається секундомір.
+
+        Повертає рішення: action, state, fallback, after_items, text (що далі), reason (чому), state_view.
+        """
         action = self.agent.choose_action(self.state, self.env.valid_actions())
-        name = config.ACTIONS[action]
-        fallback = bool(self.agent.last_was_fallback)
-        self.decision = {"action": name, "state": self.state, "fallback": fallback,
-                         "after_items": self.env.items_done, "text": config.ACTION_TEXT_UA[name],
-                         "reason": FALLBACK_TEXT if fallback else reason_text(self.env)}
+        name, fallback = config.ACTIONS[action], bool(self.agent.last_was_fallback)
         self.item = None
         if action != BREAK:
             self.item = self.env.next_item(action)
             self.stopwatch.start()
-        if name == "review_weak_topic":
-            self.decision["text"] = review_text(self.env, self.item)
+        self.decision = {"action": name, "state": self.state, "fallback": fallback,
+                         "after_items": self.env.items_done, "text": headline(name, self.env, self.item),
+                         "reason": why_text(name, self.env, self.item, self.topic_counts(), fallback),
+                         "state_view": state_view(self.state)}
         return self.decision
+
+    def topic_counts(self) -> dict:
+        """Скільки завдань і правильних у кожній підтемі за цю сесію: {підтема: (усього, правильно)}."""
+        counts = {}
+        for subtopic, ok in self.results:
+            done, right = counts.get(subtopic, (0, 0))
+            counts[subtopic] = (done + 1, right + ok)
+        return counts
 
     def answer(self, chosen: int) -> dict:
         """Учень обрав варіант chosen: зупиняє секундомір, оновлює оцінку знань, повертає запис і розбір."""
@@ -175,7 +145,7 @@ class LiveSession:
                   "correct": correct, "time_sec": round(time_sec, 1), "action": self.decision["action"],
                   "p_hat": info["p_hat"], "theta_hat": self.env.estimator.snapshot(),
                   "state": self.decision["state"], "fallback": self.decision["fallback"]}
-        return {"record": record, "feedback": feedback(item, correct)}
+        return {"record": record, "feedback": feedback(item, correct, chosen)}
 
     def take_break(self, report: int | None = None) -> None:
         """Учень повернувся з перерви; report — самооцінка енергії 1–5 (або None)."""
@@ -193,10 +163,7 @@ class LiveSession:
 
     def summary(self) -> dict:
         """Підсумок для учня: скільки розв'язано, що вдалося, над чим попрацювати."""
-        by_topic = {}
-        for subtopic, ok in self.results:
-            done, right = by_topic.get(subtopic, (0, 0))
-            by_topic[subtopic] = (done + 1, right + ok)
+        by_topic = self.topic_counts()
         good = [s for s, (done, right) in by_topic.items() if done == right]
         shaky = sorted((s for s, (done, right) in by_topic.items() if right < done),
                        key=self.env.estimator.theta_blended)[:config.SUMMARY_WEAK_TOPICS]
@@ -205,9 +172,11 @@ class LiveSession:
                 "names": names, "good": good, "weak": shaky}
 
 
-def feedback(item: dict, correct: bool) -> dict:
-    """Розбір: правильно — один рядок; помилка — правильна відповідь, кроки розв'язку і типова помилка."""
+def feedback(item: dict, correct: bool, chosen: int | None = None) -> dict:
+    """Розбір: правильно — один рядок; помилка — твоя і правильна відповіді, кроки розв'язку, типова помилка."""
     if correct:
         return {"correct": True, "text": item["explanation"]}
     sol = solve(item)
-    return {"correct": False, "answer": sol["answer"], "steps": sol["steps"], "typical_error": sol["typical_error"]}
+    mine = None if chosen is None else item["options"][chosen]
+    return {"correct": False, "chosen": mine, "answer": sol["answer"], "steps": sol["steps"],
+            "typical_error": sol["typical_error"]}
