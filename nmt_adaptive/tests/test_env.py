@@ -310,3 +310,32 @@ def test_peek_and_level_if_are_read_only() -> None:
     assert st.asked[-1] == (sub, levels["harder"])
     with pytest.raises(ValueError):
         env.level_if(A["short_break"])
+
+
+def test_session_items_parameter() -> None:
+    """Довжина сесії задається параметром (пілот — 14), за замовчуванням — SESSION_ITEMS."""
+    import random as _random
+    from core.env import AdaptiveEnv as _Env
+    from sim.student_sim import VirtualStudent
+    env = _Env(VirtualStudent("strong_enduring", _random.Random(0)), _random.Random(0), session_items=3)
+    env.reset()
+    for _ in range(3):
+        item = env.next_given_item({"subtopic": "domain", "difficulty": 0.0})
+        env.apply_answer(env.student.answer(item["subtopic"], item["difficulty"]))
+    assert env.done and env.items_done == 3
+    assert _Env(VirtualStudent("strong_enduring", _random.Random(0)), _random.Random(0)).session_items == \
+        config.SESSION_ITEMS
+
+
+def test_warm_start_and_given_item() -> None:
+    """warm_start змінює лише θ̂ (не лічильники); next_given_item — p̂ для самого завдання."""
+    import random as _random
+    from core.env import AdaptiveEnv as _Env
+    from sim.student_sim import VirtualStudent
+    env = _Env(VirtualStudent("weak_tiring", _random.Random(1)), _random.Random(1))
+    env.reset()
+    env.warm_start([("domain", 0, True), ("range", 1, True)])
+    assert env.estimator.general() > 0 and env.items_done == 0 and env.since_break == 0
+    env.next_given_item({"subtopic": "range", "difficulty": 2.0})
+    assert env.pending["p_hat"] == pytest.approx(env.estimator.p_hat_blended("range", 2))
+    assert env.pending["action"] == config.ACTIONS.index("same")

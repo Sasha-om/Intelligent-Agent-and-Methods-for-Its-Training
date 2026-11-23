@@ -34,3 +34,4 @@ nmt_adaptive/data/exports/
 .env
 .streamlit/secrets.toml
 **/.streamlit/secrets.toml
+nmt_adaptive/results_pilot/
