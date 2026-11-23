@@ -76,16 +76,19 @@ class AdaptiveEnv:
     """Одна навчальна сесія учня. API як у тренажері: reset() → стан; step(дія) → (стан, нагорода, кінець, інфо)."""
 
     def __init__(self, student: object, rng: random.Random, gain_source: str = "estimate", use_fatigue: bool = True,
-                 use_self_report: bool = True, allow_break: bool = True, item_factory: Callable | None = None) -> None:
+                 use_self_report: bool = True, allow_break: bool = True, item_factory: Callable | None = None,
+                 session_items: int | None = None) -> None:
         """student — віртуальний чи реальний учень; rng — випадковість середовища; прапорці — для абляцій.
 
         item_factory(підтема, рівень, rng) → повне завдання (для застосунку); без нього — лише підтема й рівень.
+        session_items — скільки завдань у сесії (за замовчуванням config.SESSION_ITEMS; у пілоті — PILOT_TRAIN_ITEMS).
         """
         if gain_source not in GAIN_SOURCES:
             raise ValueError(f"gain_source має бути одним із {GAIN_SOURCES}, а не {gain_source!r}")
         self.student, self.rng, self.gain_source = student, rng, gain_source
         self.use_fatigue, self.use_self_report, self.allow_break = use_fatigue, use_self_report, allow_break
         self.item_factory = item_factory
+        self.session_items = session_items or config.SESSION_ITEMS
         self.subtopics = list(config.SUBTOPICS)
 
     # ------------------------------------------------------------------ початок сесії
@@ -100,6 +103,16 @@ class AdaptiveEnv:
         self.times, self.recent = [], deque(maxlen=config.ACCURACY_WINDOW)
         self.last_correct, self.done, self.pending = None, False, None
         self.last_subtopic, self.repeat = None, 0
+        self.start_potential = self._potential()
+        return self.state()
+
+    def warm_start(self, answers: list) -> int:
+        """Стартова оцінка знань з вхідного тесту: answers — [(підтема, рівень, правильно?)]. Повертає стан.
+
+        Лічильники сесії (втома, точність останніх) не змінюються — змінюється лише θ̂.
+        """
+        for subtopic, level, correct in answers:
+            self.estimator.update(subtopic, float(level), bool(correct))
         self.start_potential = self._potential()
         return self.state()
 
@@ -190,6 +203,17 @@ class AdaptiveEnv:
                         "p_hat": self.estimator.p_hat_blended(subtopic, self.level), "potential": self._potential()}
         return item
 
+    def next_given_item(self, item: dict) -> dict:
+        """Завдання, обране ззовні (фіксований тест): p̂ — для його власних підтеми й рівня; дія в журналі — «same»."""
+        if self.done:
+            raise RuntimeError("Сесію завершено.")
+        self.level = int(item["difficulty"])
+        fatigue_before = fatigue_level(self.since_break, self.times)
+        self.pending = {"action": config.ACTIONS.index("same"), "item": item, "fatigue_before": fatigue_before,
+                        "p_hat": self.estimator.p_hat_blended(item["subtopic"], self.level),
+                        "potential": self._potential()}
+        return item
+
     def peek_subtopic(self) -> str:
         """Підтема, яку отримають easier/same/harder на наступному кроці (лише читання, без змін)."""
         return self.subtopics[self.pointer % len(self.subtopics)]
@@ -227,7 +251,7 @@ class AdaptiveEnv:
         self.last_correct = response.correct
         self.repeat = self.repeat + 1 if item["subtopic"] == self.last_subtopic else 1
         self.last_subtopic = item["subtopic"]
-        self.done = response.dropped or self.items_done >= config.SESSION_ITEMS
+        self.done = response.dropped or self.items_done >= self.session_items
         parts["gain"] = config.R_GAIN_COEF * (self._potential() - pend["potential"])
         info = self._info(pend["action"], item, parts, response, pend["p_hat"])
         return self.state(), sum(parts.values()), self.done, info

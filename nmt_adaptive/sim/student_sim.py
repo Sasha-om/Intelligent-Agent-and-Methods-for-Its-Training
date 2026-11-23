@@ -88,6 +88,11 @@ class VirtualStudent:
         """Коротка перерва знімає частину накопиченої втоми."""
         self._fatigue *= 1.0 - config.SIM_BREAK_RECOVERY
 
+    def rest_overnight(self) -> None:
+        """«Наступний день»: утома повертається до стартової, серія помилок скидається (знання лишаються)."""
+        self._fatigue = self._start_fatigue
+        self.wrong_streak = 0
+
     def self_report(self) -> int:
         """Самооцінка стану 1–5 (5 — бадьорий): шумна версія прихованої втоми."""
         return _scale_1_5(5 - 4 * self._fatigue + self.rng.gauss(0.0, config.SIM_SELF_REPORT_NOISE))
