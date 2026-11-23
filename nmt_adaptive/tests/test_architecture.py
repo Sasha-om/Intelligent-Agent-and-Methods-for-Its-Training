@@ -81,3 +81,18 @@ def test_launcher_ports_match_config() -> None:
     assert f"--server.address 0.0.0.0 --server.port {config.CLASS_PORT}" in class_part
     teacher_line = next(line for line in class_part.splitlines() if "app_teacher.py" in line)
     assert f"--server.port {config.TEACHER_PORT}" in teacher_line and "0.0.0.0" not in teacher_line
+
+
+def test_pilot_results_not_in_git() -> None:
+    """results_pilot/ (похідні від даних учнів) — у кореневому .gitignore; модулі пілоту — без streamlit."""
+    gitignore = (config.BASE_DIR.parent / ".gitignore").read_bytes().decode("utf-8-sig")
+    assert "nmt_adaptive/results_pilot/" in gitignore and config.PILOT_RESULTS_DIR.name == "results_pilot"
+    for name in ("pilot.py", "pilot_storage.py", "pilot_report.py", "strategies.py"):
+        assert "streamlit" not in _imported_modules(config.BASE_DIR / "app" / name)
+
+
+def test_sim_does_not_import_app() -> None:
+    """Шари: sim/ (симуляція) не залежить від app/ (застосунку); спільна статистика — у core/stats.py."""
+    offenders = [p.name for p in (config.BASE_DIR / "sim").glob("*.py")
+                 if any(m == "app" or m.startswith("app.") for m in _imported_modules(p))]
+    assert offenders == []

@@ -14,9 +14,10 @@ TEACHER = str(config.BASE_DIR / "app" / "app_teacher.py")
 
 @pytest.fixture
 def db_path(tmp_path, monkeypatch):
-    """Сторінки пишуть у тимчасову базу, а не в data/students/."""
+    """Сторінки пишуть у тимчасову базу, а не в data/students/. Тут — сценарій етапу 9 (без тестів і вибору)."""
     path = tmp_path / "students" / "app.sqlite"
     monkeypatch.setattr(config, "DB_PATH", path)
+    monkeypatch.setattr(config, "PILOT_COMPARE", False)
     return path
 
 

@@ -21,7 +21,10 @@ import streamlit as st      # noqa: E402
 
 import config               # noqa: E402
 from app import storage     # noqa: E402
+from app import pilot_storage         # noqa: E402
+from app.pilot import PilotTest, make_form   # noqa: E402
 from app.session import LiveSession   # noqa: E402
+from app.strategies import make_strategy     # noqa: E402
 from core.agent import QAgent         # noqa: E402
 from core.items import load_bank      # noqa: E402
 
@@ -38,6 +41,9 @@ CONSENT_TEXT = """
 
 **Твої права:** можна зупинитися будь-коли. У меню «Мої дані» можна завантажити або видалити все, що записано.
 """
+PILOT_CONSENT = ("\n**Як побудовано заняття:** короткий тест (6 завдань) → ти сам обираєш один із трьох способів "
+                 "підбору завдань для тренування (усі три — корисні) → ще один короткий тест, щоб побачити зміни.\n")
+PILOT_KEYS = ("test", "live", "arm", "card_order", "pre_score", "post_score", "pilot_order", "checkin")
 CONSENT_BOX = ("Мені пояснили, як це працює, і мої батьки (або школа) дали згоду на участь."
                if config.REQUIRE_GUARDIAN_CONSENT else "Мені пояснили, як це працює, і я погоджуюсь.")
 NO_ANSWER = "не скажу"
@@ -63,7 +69,7 @@ def go(step: str) -> None:
 # ----------------------------------------------------------------------------- 1. згода і 2. код
 def page_consent() -> None:
     """Згода: без галочки далі не пускає і нічого не записує."""
-    st.markdown(CONSENT_TEXT)
+    st.markdown(CONSENT_TEXT + (PILOT_CONSENT if config.PILOT_COMPARE else ""))
     agreed = st.checkbox(CONSENT_BOX, key="consent_box")
     if st.button("Далі", key="consent_next", disabled=not agreed, type="primary"):
         st.session_state.consent = True
@@ -118,12 +124,116 @@ def page_checkin() -> None:
 
 
 def start_session(checkin: dict) -> None:
-    """Нова сесія: запис у базу, свій екземпляр замороженого агента, перше рішення агента."""
+    """Нова сесія: запис у базу; у режимі порівняння — вхідний тест, інакше — одразу тренування з Q-агентом."""
+    for key in PILOT_KEYS:
+        st.session_state.pop(key, None)
     with db() as conn:
         st.session_state.session_id = storage.start_session(conn, st.session_state.code, checkin)
-    st.session_state.update(closed=False, new_code=False)
+    st.session_state.update(closed=False, new_code=False, checkin=checkin)
+    if config.PILOT_COMPARE:
+        begin_exam("pre")
+        return
     agent = QAgent.load(config.POLICY_PATH, np.random.default_rng(0))   # ε = 0, без навчання
-    st.session_state.live = LiveSession(agent, get_bank(), checkin, seed=random.SystemRandom().randrange(config.SESSION_SEED_MAX))
+    st.session_state.live = LiveSession(agent, get_bank(), checkin, seed=new_seed())
+    next_step()
+
+
+def new_seed() -> int:
+    """Випадковість середовища для нової сесії."""
+    return random.SystemRandom().randrange(config.SESSION_SEED_MAX)
+
+
+# ----------------------------------------------------------------------------- режим порівняння: тести і вибір
+def begin_exam(phase: str) -> None:
+    """Вхідний ("pre") або вихідний ("post") тест: форма — за порядком учня (AB / BA)."""
+    with db() as conn:
+        order = pilot_storage.form_order(conn, st.session_state.code, random.SystemRandom())
+        pilot_storage.set_phase(conn, st.session_state.session_id, phase)
+    form = order[0] if phase == "pre" else order[1]
+    st.session_state.update(pilot_order=order, test=PilotTest(phase, form, make_form(form, get_bank())))
+    go("exam")
+    st.rerun()
+
+
+def page_exam() -> None:
+    """Тест без розбору: 6 завдань; бал побачиш у підсумку."""
+    test = st.session_state.test
+    intro = ("Спершу короткий тест — щоб побачити, з чого починаємо." if test.phase == "pre"
+             else "Останній крок — ще один короткий тест, щоб побачити, що змінилось.")
+    st.info(f"**{'Вхідний' if test.phase == 'pre' else 'Вихідний'} тест.** {intro} "
+            "Розбору тут не буде — відповідай, як знаєш.", icon="📝")
+    item, k = test.current, len(test.results)
+    st.caption(f"Завдання {k + 1} з {len(test.items)} · {item['subtopic_name']}")
+    st.markdown(f"#### {item['question']}")
+    labels = [f"{'АБВГ'[i]}) {text}" for i, text in enumerate(item["options"])]
+    choice = st.radio("Обери відповідь:", range(len(labels)), format_func=labels.__getitem__, index=None,
+                      key=f"exam_{test.phase}_{k}")
+    if st.button("Відповісти", key="exam_btn", disabled=choice is None, type="primary"):
+        exam_answer(test, choice)
+    stop_button()
+
+
+def exam_answer(test: PilotTest, choice: int) -> None:
+    """Записує відповідь тесту; після 6-ї — бал і наступний крок (вибір режиму або підсумок)."""
+    record = test.answer(choice)
+    try:
+        with db() as conn:
+            pilot_storage.save_test_answer(conn, st.session_state.session_id, record)
+            if test.done:
+                pilot_storage.save_score(conn, st.session_state.session_id, test.phase, test.score)
+    except sqlite3.Error:
+        st.session_state.save_error = True
+    if not test.done:
+        st.rerun()
+    st.session_state[f"{test.phase}_score"] = test.score
+    if test.phase == "post":
+        with db() as conn:
+            pilot_storage.set_phase(conn, st.session_state.session_id, "done")
+        finish(dropped=False)
+    else:
+        after_pre_test()
+
+
+def after_pre_test() -> None:
+    """Після вхідного тесту: учень обирає режим (або програма розподіляє порівну)."""
+    if config.PILOT_ASSIGNMENT == "random":
+        with db() as conn:
+            arm = pilot_storage.assign_arm(conn, random.SystemRandom())
+        pick_arm(arm, None)
+    with db() as conn:
+        pilot_storage.set_phase(conn, st.session_state.session_id, "choose")
+    go("choose")
+    st.rerun()
+
+
+def page_choose() -> None:
+    """Вибір режиму тренування: три картки у випадковому порядку, нейтральні описи."""
+    if "card_order" not in st.session_state:
+        order = list(config.PILOT_ARMS)
+        random.SystemRandom().shuffle(order)
+        st.session_state.card_order = order
+    st.subheader("Обери, як тренуватися")
+    st.write(f"Далі — {config.PILOT_TRAIN_ITEMS} завдань з розбором після кожної відповіді. Усі три способи корисні.")
+    for position, arm in enumerate(st.session_state.card_order, 1):
+        title, text = config.PILOT_ARM_CARDS_UA[arm]
+        with st.container(border=True):
+            st.markdown(f"**{title}**")
+            st.write(text)
+            if st.button("Обрати", key=f"choose_{arm}"):
+                pick_arm(arm, position)
+    stop_button()
+
+
+def pick_arm(arm: str, position: int | None) -> None:
+    """Записує режим і починає тренування: стартова θ̂ — з вхідного тесту; тестові завдання не повторюються."""
+    with db() as conn:
+        pilot_storage.choose_arm(conn, st.session_state.session_id, arm, position)
+    bank = get_bank()
+    tests = make_form("A", bank) + make_form("B", bank)
+    st.session_state.arm = arm
+    st.session_state.live = LiveSession(make_strategy(arm, bank, tests), bank, st.session_state.checkin, new_seed(),
+                                        session_items=config.PILOT_TRAIN_ITEMS, warm=st.session_state.test.results,
+                                        exclude=tests)
     next_step()
 
 
@@ -141,6 +251,9 @@ def next_step() -> None:
 def show_decision() -> None:
     """Рішення агента: що далі (жирним), чому (факти) і, за бажанням, стан, з якого він обирав."""
     decision = st.session_state.live.decision
+    if decision["state_view"] is None:          # режими CAT і «звичайний тест»: лише тема і складність
+        st.info(decision["text"], icon="📘")
+        return
     st.info(f"**{decision['text']}**\n\n{decision['reason']}", icon="🤖")
     with st.expander("Як агент це вирішив?"):
         if decision["fallback"]:
@@ -156,7 +269,7 @@ def page_task() -> None:
     live = st.session_state.live
     item = live.item
     show_decision()
-    st.caption(f"Завдання {live.env.items_done + 1} з {config.SESSION_ITEMS} · {item['subtopic_name']}")
+    st.caption(f"Завдання {live.env.items_done + 1} з {live.env.session_items} · {item['subtopic_name']}")
     st.markdown(f"#### {item['question']}")
     labels = [f"{'АБВГ'[i]}) {text}" for i, text in enumerate(item["options"])]
     choice = st.radio("Обери відповідь:", range(len(labels)), format_func=labels.__getitem__, index=None,
@@ -164,7 +277,7 @@ def page_task() -> None:
     if st.button("Відповісти", key="answer_btn", disabled=choice is None, type="primary"):
         out = live.answer(choice)
         save_answer(out["record"])
-        if live.done:            # 20-те завдання: сесію закриваємо одразу, навіть якщо учень не натисне «Підсумок»
+        if live.done and not config.PILOT_COMPARE:   # останнє завдання: сесію закриваємо одразу
             close_session(dropped=False)
         st.session_state.feedback = out["feedback"]
         go("feedback")
@@ -192,7 +305,11 @@ def page_feedback() -> None:
         st.error(f"❌ Помилка. Твоя відповідь: {fb['chosen']}. Правильна: **{fb['answer']}**")
         st.markdown("**Розв'язок:**\n" + "\n".join(f"{i}. {s}" for i, s in enumerate(fb["steps"], 1)))
         st.warning(f"Типова помилка: {fb['typical_error']}")
-    if st.session_state.live.done:
+    if st.session_state.live.done and config.PILOT_COMPARE:
+        if st.button("До вихідного тесту", key="to_post", type="primary"):
+            begin_exam("post")
+        stop_button()
+    elif st.session_state.live.done:
         if st.button("Підсумок", key="to_summary", type="primary"):
             finish(dropped=False)
     else:
@@ -226,8 +343,9 @@ def close_session(dropped: bool) -> None:
     """Записує кінець сесії в базу (лише один раз)."""
     if st.session_state.get("closed"):
         return
+    live = st.session_state.get("live")
     with db() as conn:
-        storage.end_session(conn, st.session_state.session_id, dropped, st.session_state.live.stats())
+        storage.end_session(conn, st.session_state.session_id, dropped, live.stats() if live else {})
     st.session_state.closed = True
 
 
@@ -240,14 +358,17 @@ def finish(dropped: bool) -> None:
 
 # ----------------------------------------------------------------------------- 8. підсумок
 def page_summary() -> None:
-    """Підсумок сесії і прогрес за днями."""
-    s = st.session_state.live.summary()
+    """Підсумок сесії: тести «вхід → вихід» (режим порівняння), тренування, прогрес за днями."""
     st.subheader("Підсумок")
-    st.metric("Правильних відповідей", f"{s['right']} з {s['items']}")
-    if s["good"]:
-        st.success("Вдалося: " + ", ".join(s["names"][t] for t in s["good"]))
-    if s["weak"]:
-        st.warning("Варто повторити: " + ", ".join(s["names"][t] for t in s["weak"]))
+    show_exam_scores()
+    live = st.session_state.get("live")
+    if live is not None and live.results:
+        s = live.summary()
+        st.metric("Тренування: правильних відповідей", f"{s['right']} з {s['items']}")
+        if s["good"]:
+            st.success("Вдалося: " + ", ".join(s["names"][t] for t in s["good"]))
+        if s["weak"]:
+            st.warning("Варто повторити: " + ", ".join(s["names"][t] for t in s["weak"]))
     with db() as conn:
         history = storage.student_history(conn, st.session_state.code)
     if len(history) > 1:      # прогрес має сенс між днями (дні без відповідей не показуємо)
@@ -263,6 +384,18 @@ def page_summary() -> None:
 
 
 # ----------------------------------------------------------------------------- 9. мої дані
+def show_exam_scores() -> None:
+    """«Вхідний тест: 3 з 6 → вихідний: 5 з 6» (якщо тести були)."""
+    pre, post = st.session_state.get("pre_score"), st.session_state.get("post_score")
+    if pre is None:
+        return
+    total = len(config.PILOT_TEST_SLOTS)
+    if post is None:
+        st.metric("Вхідний тест", f"{pre} з {total}")
+        return
+    st.metric("Вхідний тест → вихідний тест", f"{pre} → {post} з {total}", delta=post - pre)
+
+
 def sidebar_my_data() -> None:
     """Меню «Мої дані»: експорт (JSON) і видалення з підтвердженням."""
     code = st.session_state.get("code")
@@ -289,13 +422,14 @@ def sidebar_my_data() -> None:
 
 def logout() -> None:
     """Вихід: незавершена сесія закривається як дострокова, стан сторінки очищується (для спільного ПК)."""
-    if st.session_state.get("live") is not None and not st.session_state.get("closed"):
+    if st.session_state.get("session_id") is not None and not st.session_state.get("closed"):
         close_session(dropped=True)
     st.session_state.clear()
     st.rerun()
 
 
-SCREENS = {"consent": page_consent, "code": page_code, "checkin": page_checkin, "task": page_task,
+SCREENS = {"consent": page_consent, "code": page_code, "checkin": page_checkin, "exam": page_exam,
+           "choose": page_choose, "task": page_task,
            "feedback": page_feedback, "break": page_break, "summary": page_summary}
 
 

@@ -30,7 +30,16 @@ CREATE TABLE IF NOT EXISTS breaks (
     id INTEGER PRIMARY KEY AUTOINCREMENT, session_id INTEGER NOT NULL REFERENCES sessions(id),
     after_items INTEGER NOT NULL, state INTEGER, fallback INTEGER NOT NULL, taken INTEGER NOT NULL DEFAULT 0,
     energy INTEGER);
+CREATE TABLE IF NOT EXISTS test_answers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, session_id INTEGER NOT NULL REFERENCES sessions(id),
+    phase TEXT NOT NULL, form TEXT NOT NULL, slot INTEGER NOT NULL, item_id TEXT NOT NULL, subtopic TEXT NOT NULL,
+    difficulty REAL NOT NULL, chosen INTEGER NOT NULL, correct INTEGER NOT NULL, time_sec REAL NOT NULL);
 """
+MIGRATIONS = {   # поля, додані на етапі 10: старі бази (етап 9) отримують їх автоматично
+    "students": {"form_order": "TEXT"},
+    "sessions": {"arm": "TEXT", "card_position": "INTEGER", "pre_score": "INTEGER", "post_score": "INTEGER",
+                 "phase": "TEXT"},
+}
 ANSWER_FIELDS = ("n", "item_id", "subtopic", "difficulty", "params", "chosen", "correct", "time_sec",
                  "action", "p_hat", "theta_hat", "state", "fallback")
 JSON_FIELDS = ("params", "theta_hat")
@@ -51,7 +60,18 @@ def connect(path: Path | None = None) -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA secure_delete = ON")   # видалене затирається нулями, а не лишається у файлі
     conn.executescript(SCHEMA)
+    _migrate(conn)
     return conn
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Додає поля з MIGRATIONS, яких ще немає (база, створена до етапу 10, працює далі без втрати даних)."""
+    for table, columns in MIGRATIONS.items():
+        have = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+        for name, kind in columns.items():
+            if name not in have:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {kind}")
+    conn.commit()
 
 
 # ----------------------------------------------------------------------------- учень і згода
@@ -166,8 +186,9 @@ def student_data(conn: sqlite3.Connection, code: str) -> dict:
     for s in conn.execute("SELECT * FROM sessions WHERE code = ? ORDER BY id", (code,)):
         rows = conn.execute("SELECT * FROM answers WHERE session_id = ? ORDER BY n, id", (s["id"],))
         breaks = conn.execute("SELECT * FROM breaks WHERE session_id = ? ORDER BY id", (s["id"],))
+        tests = conn.execute("SELECT * FROM test_answers WHERE session_id = ? ORDER BY id", (s["id"],))
         sessions.append({**_row_dict(s), "answers": [_row_dict(a) for a in rows],
-                         "break_log": [_row_dict(b) for b in breaks]})
+                         "break_log": [_row_dict(b) for b in breaks], "test_answers": [_row_dict(t) for t in tests]})
     return {**_row_dict(student), "exported_at": _now(), "sessions": sessions}
 
 
@@ -181,7 +202,7 @@ def export_student(conn: sqlite3.Connection, code: str, folder: Path | None = No
 
 
 def delete_student(conn: sqlite3.Connection, code: str, folder: Path | None = None) -> int:
-    """Видаляє ВСЕ про учня: відповіді, перерви, сесії, згоду і файл експорту. Повертає кількість рядків бази.
+    """Видаляє ВСЕ про учня: відповіді, перерви, тести, сесії, згоду і файл експорту. Повертає кількість рядків бази.
 
     PRAGMA secure_delete (у connect) затирає видалене у файлі бази, тож його не відновити.
     """
@@ -190,6 +211,7 @@ def delete_student(conn: sqlite3.Connection, code: str, folder: Path | None = No
     ids = "SELECT id FROM sessions WHERE code = ?"
     removed = conn.execute(f"DELETE FROM answers WHERE session_id IN ({ids})", (code,)).rowcount
     removed += conn.execute(f"DELETE FROM breaks WHERE session_id IN ({ids})", (code,)).rowcount
+    removed += conn.execute(f"DELETE FROM test_answers WHERE session_id IN ({ids})", (code,)).rowcount
     removed += conn.execute("DELETE FROM sessions WHERE code = ?", (code,)).rowcount
     removed += conn.execute("DELETE FROM students WHERE code = ?", (code,)).rowcount
     conn.commit()

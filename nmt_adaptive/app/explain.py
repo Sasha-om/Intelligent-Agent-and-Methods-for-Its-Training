@@ -44,6 +44,11 @@ def headline(name: str, env: AdaptiveEnv, item: dict | None) -> str:
     return f"{config.ACTION_TEXT_UA[name]} Тема {topic}."
 
 
+def plain_headline(item: dict) -> str:
+    """Заголовок без пояснень (режими CAT і «звичайний тест»): лише тема і складність."""
+    return f"Наступне завдання: тема «{item['subtopic_name']}», складність — {config.LEVEL_NAMES_UA[int(item['difficulty'])]}."
+
+
 def _level_why(name: str, env: AdaptiveEnv) -> str:
     """«Чому» для легше / те саме / складніше — лише з точності останніх відповідей."""
     acc, level = recent_text(env), env.state_parts()["accuracy"]
