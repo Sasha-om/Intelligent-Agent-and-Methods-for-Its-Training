@@ -26,6 +26,7 @@ from app.pilot import PilotTest, make_form   # noqa: E402
 from app.session import LiveSession   # noqa: E402
 from app.strategies import make_strategy     # noqa: E402
 from core.agent import QAgent         # noqa: E402
+from core.item_latex import option_markdown, question_view   # noqa: E402
 from core.items import load_bank      # noqa: E402
 
 CONSENT_TEXT = """
@@ -155,6 +156,30 @@ def begin_exam(phase: str) -> None:
     st.rerun()
 
 
+def show_question(item: dict) -> None:
+    """Умова як у підручнику: текст, а формула — окремим рядком математичним набором (system, дроби, корені)."""
+    view = question_view(item)
+    st.markdown(f"#### {view['lead']}")
+    st.latex(view["formula"])
+    if view["tail"]:
+        st.markdown(f"#### {view['tail']}")
+
+
+def option_labels(item: dict) -> list:
+    """Варіанти «А) …» з формулами (проміжки, дроби, ∞ — математичним набором)."""
+    return [f"{'АБВГ'[i]}) {option_markdown(text)}" for i, text in enumerate(item["options"])]
+
+
+def show_walkthrough(steps: list) -> None:
+    """Покроковий розв'язок: «Крок N. Назва» + пояснення, формули окремими рядками, малюнок."""
+    for s in steps:
+        st.markdown(f"**{s['title']}.** {s['text']}" if s["text"] else f"**{s['title']}**")
+        for line in s["math"]:
+            st.latex(line)
+        if s["figure"]:
+            st.image(s["figure"])
+
+
 def page_exam() -> None:
     """Тест без розбору: 6 завдань; бал побачиш у підсумку."""
     test = st.session_state.test
@@ -164,8 +189,8 @@ def page_exam() -> None:
             "Розбору тут не буде — відповідай, як знаєш.", icon="📝")
     item, k = test.current, len(test.results)
     st.caption(f"Завдання {k + 1} з {len(test.items)} · {item['subtopic_name']}")
-    st.markdown(f"#### {item['question']}")
-    labels = [f"{'АБВГ'[i]}) {text}" for i, text in enumerate(item["options"])]
+    show_question(item)
+    labels = option_labels(item)
     choice = st.radio("Обери відповідь:", range(len(labels)), format_func=labels.__getitem__, index=None,
                       key=f"exam_{test.phase}_{k}")
     if st.button("Відповісти", key="exam_btn", disabled=choice is None, type="primary"):
@@ -270,8 +295,8 @@ def page_task() -> None:
     item = live.item
     show_decision()
     st.caption(f"Завдання {live.env.items_done + 1} з {live.env.session_items} · {item['subtopic_name']}")
-    st.markdown(f"#### {item['question']}")
-    labels = [f"{'АБВГ'[i]}) {text}" for i, text in enumerate(item["options"])]
+    show_question(item)
+    labels = option_labels(item)
     choice = st.radio("Обери відповідь:", range(len(labels)), format_func=labels.__getitem__, index=None,
                       key=f"answer_{live.env.items_done}")
     if st.button("Відповісти", key="answer_btn", disabled=choice is None, type="primary"):
@@ -300,10 +325,15 @@ def page_feedback() -> None:
     if st.session_state.pop("save_error", False):
         st.error("Цю відповідь не вдалося записати (база зайнята). Можна продовжувати.")
     if fb["correct"]:
-        st.success(f"✅ Правильно! {fb['text']}")
+        st.success(f"✅ Правильно! Відповідь: **{option_markdown(fb['answer'])}**")
+        with st.expander("Подивитися розв'язок крок за кроком"):
+            show_walkthrough(fb["walkthrough"])
     else:
-        st.error(f"❌ Помилка. Твоя відповідь: {fb['chosen']}. Правильна: **{fb['answer']}**")
-        st.markdown("**Розв'язок:**\n" + "\n".join(f"{i}. {s}" for i, s in enumerate(fb["steps"], 1)))
+        st.error(f"❌ Помилка. Твоя відповідь: {option_markdown(fb['chosen'])}. "
+                 f"Правильна: **{option_markdown(fb['answer'])}**")
+        st.markdown("### Розв'язок крок за кроком")
+        with st.container(border=True):
+            show_walkthrough(fb["walkthrough"])
         st.warning(f"Типова помилка: {fb['typical_error']}")
     if st.session_state.live.done and config.PILOT_COMPARE:
         if st.button("До вихідного тесту", key="to_post", type="primary"):

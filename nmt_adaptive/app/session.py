@@ -15,6 +15,7 @@ from core.agent import QAgent
 from app.explain import headline, plain_headline, state_view, why_text
 from core.env import BREAK, AdaptiveEnv
 from core.items import is_correct, make_item, solve
+from core.walkthrough import walkthrough
 
 
 @dataclass
@@ -200,10 +201,13 @@ class LiveSession:
 
 
 def feedback(item: dict, correct: bool, chosen: int | None = None) -> dict:
-    """Розбір: правильно — один рядок; помилка — твоя і правильна відповіді, кроки розв'язку, типова помилка."""
+    """Розбір: правильно — один рядок + покроковий розв'язок «за бажанням»; помилка — твоя і правильна відповіді,
+    покроковий розв'язок (з формулами, малюнками і перевіркою на прикладі) і типова помилка."""
+    steps = walkthrough(item)["steps"]
     if correct:
-        return {"correct": True, "text": item["explanation"]}
+        return {"correct": True, "text": item["explanation"], "answer": item["options"][item["answer"]],
+                "walkthrough": steps}
     sol = solve(item)
     mine = None if chosen is None else item["options"][chosen]
     return {"correct": False, "chosen": mine, "answer": sol["answer"], "steps": sol["steps"],
-            "typical_error": sol["typical_error"]}
+            "typical_error": sol["typical_error"], "walkthrough": steps}

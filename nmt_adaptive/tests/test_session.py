@@ -100,7 +100,10 @@ def test_wrong_answer_gets_steps(agent, bank) -> None:
     assert fb["correct"] is False and fb["steps"] == solve(item)["steps"] and fb["typical_error"]
     assert fb["chosen"] == item["options"][wrong]
     assert fb["answer"] == item["options"][item["answer"]]
-    assert feedback(item, True) == {"correct": True, "text": item["explanation"]}
+    good = feedback(item, True)
+    assert good["correct"] is True and good["text"] == item["explanation"]
+    assert good["answer"] == item["options"][item["answer"]]
+    assert good["walkthrough"][-1]["title"] == "Відповідь" and fb["walkthrough"] == good["walkthrough"]
 
 
 def test_answer_without_item_fails(agent, bank) -> None:
