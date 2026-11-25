@@ -221,3 +221,31 @@ def test_review_after_stop_mid_pre_test(db_path) -> None:
         at = _run(at.button(key="exam_btn").click())
     at = _run(at.button(key="stop").click())
     assert [t.label for t in at.tabs] == ["Вхідний тест: 2 з 2"]
+
+
+def test_teacher_annuls_results(db_path) -> None:
+    """«Анулювати результати»: без галочки кнопка вимкнена; після — таблиці порожні, копія бази в archive/ з даними."""
+    _fill_pilot(db_path, {"q_agent": [(2, 4), (3, 5), (4, 5)], "cat": [(3, 3), (2, 3), (4, 4)]})
+    at = _run(AppTest.from_file(TEACHER))
+    assert at.button(key="annul_btn").disabled
+    _run(at.checkbox(key="annul_sure").check())
+    assert not at.button(key="annul_btn").disabled
+    at = _run(at.button(key="annul_btn").click())
+    assert "Результати анульовано" in _texts(at) and at.button(key="annul_btn").disabled
+    for table in ("students", "sessions", "answers", "test_answers", "breaks"):
+        assert _query(db_path, f"SELECT COUNT(*) FROM {table}") == [(0,)]
+    archives = list((db_path.parent / config.ARCHIVE_SUBDIR).glob("*.sqlite"))
+    assert len(archives) == 1 and _query(archives[0], "SELECT COUNT(*) FROM sessions") == [(6,)]
+
+
+def test_annul_waits_for_active_students(db_path) -> None:
+    """Хтось зараз проходить тест → потрібна друга галочка; порожню базу «анулювати» нічого."""
+    _start(db_path)
+    at = _run(AppTest.from_file(TEACHER))
+    _run(at.checkbox(key="annul_sure").check())
+    assert at.button(key="annul_btn").disabled
+    _run(at.checkbox(key="annul_busy").check())
+    at = _run(at.button(key="annul_btn").click())
+    assert _query(db_path, "SELECT COUNT(*) FROM sessions") == [(0,)]
+    with closing(storage.connect(db_path)) as conn:
+        assert storage.annul_all(conn) is None

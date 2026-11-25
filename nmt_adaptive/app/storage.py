@@ -7,6 +7,7 @@
 import json
 import random
 import sqlite3
+from contextlib import closing
 from datetime import datetime
 from pathlib import Path
 
@@ -290,6 +291,26 @@ def class_aggregates(conn: sqlite3.Connection, min_group: int = config.MIN_GROUP
     return {"students": students, **_session_stats(conn, min_group, before), "accuracy_by_subtopic": accuracy,
             "weak_topics": weak, "mean_time_sec": _mean_of_students(rows, "time_sec"),
             "fallback_share": sum(r["fallback"] for r in rows) / len(rows)}
+
+
+def annul_all(conn: sqlite3.Connection) -> Path | None:
+    """«Анулювати результати»: копія бази в archive/ поруч із нею, потім таблиці очищаються. Повертає шлях копії.
+
+    Нічого не губиться безповоротно: копію можна передати в pilot_report (--db). Порожня база — None.
+    """
+    if not conn.execute("SELECT COUNT(*) FROM students").fetchone()[0]:
+        return None
+    main_file = Path(conn.execute("PRAGMA database_list").fetchone()["file"])
+    folder = main_file.parent / config.ARCHIVE_SUBDIR
+    folder.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    archive = folder / f"{main_file.stem}_анульовано_{stamp}.sqlite"
+    with closing(sqlite3.connect(archive)) as copy:
+        conn.backup(copy)
+    for table in ("answers", "breaks", "test_answers", "sessions", "students"):
+        conn.execute(f"DELETE FROM {table}")
+    conn.commit()
+    return archive
 
 
 def in_progress_today(conn: sqlite3.Connection) -> int:

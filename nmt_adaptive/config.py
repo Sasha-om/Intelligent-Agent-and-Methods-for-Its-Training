@@ -14,6 +14,7 @@ POLICY_PATH = DATA_DIR / "policy.json"                 # заморожена Q-
 STUDENTS_DIR = DATA_DIR / "students"                   # локальні дані учнів (НЕ в git)
 EXPORTS_DIR = DATA_DIR / "exports"                     # експорт даних учня (НЕ в git)
 DB_PATH = STUDENTS_DIR / "nmt_sessions.sqlite"         # SQLite-файл з анонімними сесіями
+ARCHIVE_SUBDIR = "archive"     # «Анулювати результати»: копія бази — у папку archive поруч із базою (НЕ в git)
 RESULTS_DIR = BASE_DIR / "results"                     # графіки PNG і таблиці CSV для тексту роботи
 TRAINER_DIR = BASE_DIR.parent / "Platform for Interaction"   # тренажер МАН (звідти імпортуємо qlearn)
 
