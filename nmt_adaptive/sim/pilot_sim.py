@@ -1,10 +1,13 @@
 """Симуляція пілоту (етап 10) — ДО уроку: що покаже вхідний і вихідний тест для трьох режимів.
 
-Сценарій той самий, що на уроці: 6 завдань на вході → 14 тренувальних (Q-агент / CAT / фіксований) → 6 на виході.
+Сценарій той самий, що на уроці: 12 завдань на вході → 14 тренувальних (Q-агент / CAT / фіксований;
+теми тестів — обов'язкові) → перерва → 12 на виході.
 Віртуальні учні — ті самі (clone) для всіх режимів. Питання:
   1) який приріст на тесті очікувати і наскільки він схожий на справжній приріст знань
      (і що було б, якби вихідний тест писали наступного дня — без утоми);
-  2) потужність: якщо в групі n учнів, як часто різниця «Q − інший режим» виходить значущою.
+  2) потужність: якщо в групі n учнів, як часто різниця «Q − інший режим» виходить значущою;
+  3) етап 12: крива навчання з тренувальних відповідей — яку «швидкість навчання» вона покаже
+     і скільки з неї дає не навчання, а втома та вибір тем (контроль: ті самі учні, що НЕ вчаться).
 
 Запуск:  python -m sim.pilot_sim            (≈ 1–2 хв)
          python -m sim.pilot_sim --quick    (швидка перевірка)
@@ -12,16 +15,18 @@
 import argparse
 import random
 import time
+from contextlib import contextmanager
 from pathlib import Path
 
 import numpy as np
 
 import config
-from core.stats import ancova, mean_ci
+from core import learning_curve as lc
+from core.stats import ancova, mean_ci, t_critical
 from core.agent import QAgent
 from core.baselines import CATPolicy
 from core.env import BREAK, AdaptiveEnv
-from core.pilot_design import fixed_slots, exam_slots
+from core.pilot_design import CoverageGuard, exam_slots, fixed_slots
 from sim.evaluate import ENV_SEED_SHIFT
 from sim.legacy import write_csv
 from sim.student_sim import clone, make_population
@@ -42,8 +47,12 @@ def run_test(student: object) -> tuple:
     return sum(ok for *_, ok in answers), answers, False
 
 
-def choose(arm: str, env: AdaptiveEnv, state: int, agent: QAgent, cat: CATPolicy) -> tuple:
-    """Крок режиму: (дія, завдання або None)."""
+def choose(arm: str, env: AdaptiveEnv, state: int, agent: QAgent, cat: CATPolicy,
+           guard: CoverageGuard | None = None) -> tuple:
+    """Крок режиму: (дія, завдання або None). guard — обов'язкове охоплення тем тесту (як у застосунку)."""
+    forced = guard.forced(env.items_done, env.session_items) if guard is not None and arm != "fixed" else None
+    if forced is not None:     # як у застосунку (LiveSession._decide_forced): тема обов'язкова, рівень «той самий»
+        return SAME, env.next_item(SAME, subtopic=forced)
     if arm == "q_agent":
         action = agent.choose_action(state, env.valid_actions())
         return action, None if action == BREAK else env.next_item(action)
@@ -54,21 +63,27 @@ def choose(arm: str, env: AdaptiveEnv, state: int, agent: QAgent, cat: CATPolicy
     return SAME, env.next_given_item({"subtopic": subtopic, "difficulty": float(level)})
 
 
-def train(arm: str, student: object, pre_answers: list, seed: int, agent: QAgent) -> bool:
-    """Тренування в режимі arm; True — учень кинув сесію."""
+def train(arm: str, student: object, pre_answers: list, seed: int, agent: QAgent) -> tuple:
+    """Тренування в режимі arm: (кинув?, відповіді [(підтема, рівень, правильно?)])."""
     env = AdaptiveEnv(student, random.Random(seed + ENV_SEED_SHIFT), gain_source="true",
                       session_items=config.PILOT_TRAIN_ITEMS)
     env.reset()
     state, done, info = env.warm_start(pre_answers), False, {"dropped": False}
     cat = CATPolicy()
     cat.reset(env)
+    guard = CoverageGuard() if config.PILOT_COVER_TESTED else None
+    answers = []
     while not done:
-        action, item = choose(arm, env, state, agent, cat)
+        action, item = choose(arm, env, state, agent, cat, guard)
         if item is None:
             state, _, done, info = env.step(BREAK)
         else:
-            state, _, done, info = env.apply_answer(student.answer(item["subtopic"], item["difficulty"]))
-    return bool(info["dropped"])
+            if guard is not None:
+                guard.seen(item["subtopic"])
+            response = student.answer(item["subtopic"], item["difficulty"])
+            answers.append((item["subtopic"], item["difficulty"], response.correct))
+            state, _, done, info = env.apply_answer(response)
+    return bool(info["dropped"]), answers
 
 
 def mean_theta(student: object) -> float:
@@ -81,18 +96,22 @@ def run_lesson(arm: str, student: object, seed: int, agent: QAgent) -> dict:
     """Один «урок» віртуального учня: вхід → тренування → вихід. post = None, якщо кинув."""
     start = mean_theta(student)
     pre, pre_answers, dropped = run_test(student)
+    train_answers = []
     if not dropped:
-        dropped = train(arm, student, pre_answers, seed, agent)
+        dropped, train_answers = train(arm, student, pre_answers, seed, agent)
     post, post_next_day = None, None
     if not dropped:
         twin = clone(student, seed + 1)       # та сама людина, але вихідний тест — наступного дня
         twin.rest_overnight()
         post_next_day = run_test(twin)[0]
+        if config.PILOT_BREAK_BEFORE_POST:     # однакова для всіх перерва перед вихідним тестом (етап 12)
+            student.take_break()
         post, _, dropped = run_test(student)
         post = None if dropped else post
+    curve = lc.session_sums(lc.session_points(train_answers, lc.pre_estimator(pre_answers)))
     return {"режим": arm, "тип_учня": student.type_key, "вхід": pre, "вихід": post,
             "вихід_наступного_дня": post_next_day, "справжній_приріст": mean_theta(student) - start,
-            "кинув": dropped}
+            "кинув": dropped, "суми_кривої": curve}
 
 
 def simulate(students: int, seed: int, agent: QAgent) -> list:
@@ -107,8 +126,26 @@ def simulate(students: int, seed: int, agent: QAgent) -> list:
     return rows
 
 
-def arm_rows(rows: list, rng: np.random.Generator) -> list:
-    """Очікувані числа кожного режиму: вхід, вихід, приріст на тесті [ДІ], справжній приріст, відмови."""
+@contextmanager
+def no_learning():
+    """Контроль для кривої навчання: віртуальні учні не вчаться (SIM_LEARN_RATE = 0), усе інше — те саме."""
+    saved, config.SIM_LEARN_RATE = config.SIM_LEARN_RATE, 0.0
+    try:
+        yield
+    finally:
+        config.SIM_LEARN_RATE = saved
+
+
+def curve_rate(rows: list, arm: str) -> tuple:
+    """Швидкість навчання режиму (п. п. за спробу) і половина ДІ (t·SE, jackknife по учнях)."""
+    sums = [r["суми_кривої"] for r in rows if r["режим"] == arm and r["суми_кривої"][0] > 0]
+    value, se = lc.jackknife(sums)
+    half = None if se is None else 100 * se * t_critical(len(sums) - 1, config.PILOT_ALPHA)
+    return (None if value is None else 100 * value), half
+
+
+def arm_rows(rows: list, rng: np.random.Generator, control: list | None = None) -> list:
+    """Очікувані числа кожного режиму: вхід, вихід, приріст [ДІ], справжній приріст, відмови, крива навчання."""
     out = []
     for arm in config.PILOT_ARMS:
         mine = [r for r in rows if r["режим"] == arm]
@@ -123,6 +160,9 @@ def arm_rows(rows: list, rng: np.random.Generator) -> list:
                     "приріст_якщо_вихід_наступного_дня": float(np.mean(rested)),
                     "справжній_приріст_θ": float(true_gain.mean()), "кинули": 1 - len(done) / len(mine),
                     "кореляція_тест_і_справжній": float(np.corrcoef(test_gain, true_gain)[0, 1])})
+        rate, half = curve_rate(rows, arm)
+        out[-1].update(швидкість_навчання_пп=rate, швидкість_ДІ_половина=half,
+                       швидкість_без_навчання_пп=curve_rate(control, arm)[0] if control else None)
     return out
 
 
@@ -137,17 +177,27 @@ def one_trial(pools: dict, n: int, other: str, rng: np.random.Generator) -> tupl
     return res["effect"], res["significant"] and res["effect"] > 0
 
 
+def curve_trial(pools: dict, n: int, other: str, rng: np.random.Generator) -> tuple:
+    """Один «урок» для кривої навчання: (різниця швидкостей Q − інший, значуща на користь Q?)."""
+    picked = {arm: [pools[arm][k]["суми_кривої"] for k in rng.integers(0, len(pools[arm]), n)]
+              for arm in ("q_agent", other)}
+    picked = {arm: [s for s in sums if s[0] > 0] for arm, sums in picked.items()}
+    diff, significant = lc.difference_test(picked["q_agent"], picked[other])
+    return diff, significant and diff is not None and diff > 0
+
+
 def power_rows(rows: list, repeats: int, rng: np.random.Generator) -> list:
-    """Таблиця потужності: для кожного n і кожного «Q − інший» — частка значущих «уроків» і середній ефект."""
+    """Потужність: для кожного n і «Q − інший» — частка значущих «уроків» за тестом (ANCOVA) і за кривою навчання."""
     pools = {arm: [r for r in rows if r["режим"] == arm] for arm in config.PILOT_ARMS}
     out = []
-    for other in OTHERS:
-        for n in config.PILOT_SIM_GROUP_SIZES:
-            trials = [one_trial(pools, n, other, rng) for _ in range(repeats)]
-            effects = [e for e, _ in trials if e is not None]
-            out.append({"порівняння": f"Q-агент − {config.PILOT_ARM_NAMES_UA[other]}", "учнів_у_групі": n,
-                        "потужність": sum(s for _, s in trials) / repeats,
-                        "середній_ефект_балів": float(np.mean(effects)) if effects else None})
+    for measure, trial, unit in (("тест", one_trial, 1), ("крива", curve_trial, 100)):
+        for other in OTHERS:
+            for n in config.PILOT_SIM_GROUP_SIZES:
+                trials = [trial(pools, n, other, rng) for _ in range(repeats)]
+                effects = [unit * e for e, _ in trials if e is not None]
+                out.append({"міра": measure, "порівняння": f"Q-агент − {config.PILOT_ARM_NAMES_UA[other]}",
+                            "учнів_у_групі": n, "потужність": sum(s for _, s in trials) / repeats,
+                            "середній_ефект": float(np.mean(effects)) if effects else None})
     return out
 
 
@@ -169,7 +219,9 @@ def main(argv: list | None = None) -> None:
     start, rng = time.time(), np.random.default_rng(args.seed)
     agent = QAgent.load(config.POLICY_PATH, np.random.default_rng(0))
     rows = simulate(students, args.seed, agent)
-    arms, power = arm_rows(rows, rng), power_rows(rows, repeats, rng)
+    with no_learning():
+        control = simulate(students, args.seed, agent)
+    arms, power = arm_rows(rows, rng, control), power_rows(rows, repeats, rng)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     write_csv(out / "симуляція_пілоту_режими.csv", arms, list(arms[0]))
@@ -185,13 +237,15 @@ def save_power_chart(power: list, path: object) -> None:
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     fig, ax = plt.subplots(figsize=(7, 4.2))
-    for name in dict.fromkeys(r["порівняння"] for r in power):
-        mine = [r for r in power if r["порівняння"] == name]
-        ax.plot([r["учнів_у_групі"] for r in mine], [100 * r["потужність"] for r in mine], marker="o", label=name)
+    for key in dict.fromkeys((r["міра"], r["порівняння"]) for r in power):
+        mine = [r for r in power if (r["міра"], r["порівняння"]) == key]
+        ax.plot([r["учнів_у_групі"] for r in mine], [100 * r["потужність"] for r in mine], marker="o",
+                linestyle="-" if key[0] == "тест" else ":", label=f"{key[1]} ({key[0]})")
     ax.axhline(80, color="grey", linestyle="--", linewidth=1, label="80 % — звичайна вимога")
     ax.set_xlabel("учнів у кожній групі")
     ax.set_ylabel("ймовірність побачити значущу перевагу Q, %")
-    ax.set_title("Симуляція пілоту: потужність (вхід 6 → 14 → вихід 6)")
+    ax.set_title(f"Симуляція пілоту: потужність (вхід {len(exam_slots())} → {config.PILOT_TRAIN_ITEMS} → "
+                 f"вихід {len(exam_slots())})")
     ax.set_ylim(0, 100)
     ax.legend(fontsize=8)
     fig.tight_layout()
@@ -207,10 +261,17 @@ def print_tables(arms: list, power: list) -> None:
               f"[{r['приріст_ДІ_низ']:+.3f}; {r['приріст_ДІ_верх']:+.3f}]   {r['справжній_приріст_θ']:+.3f}"
               f"      {100 * r['кинули']:.0f} %   {r['кореляція_тест_і_справжній']:.2f}"
               f"   {r['приріст_якщо_вихід_наступного_дня']:+.2f}")
+    print("\nКрива навчання: швидкість, п. п. за спробу [±половина ДІ]; у дужках — ті самі учні без навчання")
+    for r in arms:
+        control = r["швидкість_без_навчання_пп"]
+        print(f"  {r['режим']:<24} {r['швидкість_навчання_пп']:+.2f} [±{r['швидкість_ДІ_половина']:.2f}]"
+              f"   ({'—' if control is None else f'{control:+.2f}'})")
     print("\nПотужність (частка «уроків», де Q значуще кращий; α = 0,025 з поправкою):")
     for r in power:
-        print(f"  {r['порівняння']:<36} n = {r['учнів_у_групі']:>2}: {100 * r['потужність']:5.1f} %"
-              f"   ефект ≈ {r['середній_ефект_балів']:+.2f} бала")
+        unit = "бала" if r["міра"] == "тест" else "п. п./спробу"
+        effect = "—" if r["середній_ефект"] is None else f"{r['середній_ефект']:+.2f}"
+        print(f"  {r['міра']:<6} {r['порівняння']:<36} n = {r['учнів_у_групі']:>2}: {100 * r['потужність']:5.1f} %"
+              f"   ефект ≈ {effect} {unit}")
 
 
 if __name__ == "__main__":

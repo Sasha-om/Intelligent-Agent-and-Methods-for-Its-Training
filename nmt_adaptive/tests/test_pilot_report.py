@@ -18,7 +18,7 @@ def _fill(path, plan: dict, seed: int = 0) -> None:
                 storage.register_consent(conn, code, True)
                 pilot_storage.form_order(conn, code, rng)
                 sid = storage.start_session(conn, code, None)
-                for slot in range(1, 7):
+                for slot in range(1, len(config.PILOT_TEST_SLOTS) + 1):
                     pilot_storage.save_test_answer(conn, sid, {
                         "phase": "pre", "form": "A", "slot": slot, "item_id": f"testA{slot}", "subtopic": "domain",
                         "difficulty": float(slot % 3 - 1), "chosen": 0, "correct": slot <= pre, "time_sec": 20.0})
@@ -48,7 +48,12 @@ def test_report_recovers_effect(tmp_path) -> None:
     assert fixed["dropped"] == pytest.approx(0.5)
     names = {p.name for p in out.iterdir()}
     assert {"пілот_режими.csv", "пілот_порівняння.csv", "пілот_вибір.csv", "пілот_форми.csv",
-            "пілот_вхід_вихід.png", "пілот_складність_банку.png"} <= names
+            "пілот_вхід_вихід.png", "пілот_складність_банку.png", "пілот_крива_навчання.csv",
+            "пілот_швидкість_навчання.csv", "пілот_крива_навчання.png"} <= names
+    curve = [r for r in tables["пілот_крива_навчання"] if r["режим"] == "Q-агент"]
+    assert [(r["спроба"], r["відповідей"], r["правильно"]) for r in curve] == [(1, 6, 1.0), (2, 6, 0.0)]
+    rates = {r["режим"]: r for r in tables["пілот_швидкість_навчання"]}
+    assert rates["Q-агент"]["сесій"] == 6 and rates["Q-агент"]["швидкість_пп_за_спробу"] < 0
 
 
 def test_report_merges_several_databases(tmp_path) -> None:

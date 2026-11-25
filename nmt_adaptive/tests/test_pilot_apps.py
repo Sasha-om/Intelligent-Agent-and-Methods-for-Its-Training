@@ -73,6 +73,13 @@ def _train(at: AppTest) -> AppTest:
     return at
 
 
+def _to_post(at: AppTest) -> AppTest:
+    """«До вихідного тесту» → однакова для всіх перерва → «Почати вихідний тест»."""
+    at = _run(at.button(key="to_post").click())
+    assert at.session_state.step == "pre_post_break"
+    return _run(at.button(key="start_post").click())
+
+
 def test_pre_test_has_no_review(db_path) -> None:
     """Вхідний тест: «Розбору тут не буде», після відповіді — наступне завдання тесту, не розбір."""
     at = _start(db_path)
@@ -92,15 +99,16 @@ def test_full_lesson_each_arm(db_path, arm) -> None:
     at = _run(at.button(key=f"choose_{arm}").click())
     assert at.session_state.step in ("task", "break")
     at = _train(at)
-    at = _run(at.button(key="to_post").click())
+    at = _to_post(at)
     at = _exam(at, "post", right=5)
-    assert at.session_state.step == "summary" and "2 → 5 з 6" in _texts(at)
+    assert at.session_state.step == "summary" and f"2 → 5 з {TOTAL}" in _texts(at)
     row = _query(db_path, "SELECT arm, card_position, pre_score, post_score, phase, dropped, ended_at IS NOT NULL "
                           "FROM sessions")[0]
     position = at.session_state.card_order.index(arm) + 1
     assert row == (arm, position, 2, 5, "done", 0, 1)
     assert _query(db_path, "SELECT COUNT(*) FROM answers") == [(config.PILOT_TRAIN_ITEMS,)]
-    assert _query(db_path, "SELECT phase, COUNT(*) FROM test_answers GROUP BY phase") == [("post", 6), ("pre", 6)]
+    counts = _query(db_path, "SELECT phase, COUNT(*) FROM test_answers GROUP BY phase")
+    assert counts == [("post", TOTAL), ("pre", TOTAL)]
 
 
 def test_forms_follow_order(db_path) -> None:
@@ -108,7 +116,7 @@ def test_forms_follow_order(db_path) -> None:
     at = _exam(_start(db_path), "pre", right=0)
     order = at.session_state.pilot_order
     at = _train(_run(at.button(key="choose_fixed").click()))
-    at = _exam(_run(at.button(key="to_post").click()), "post", right=0)
+    at = _exam(_to_post(at), "post", right=0)
     forms = _query(db_path, "SELECT phase, form FROM test_answers GROUP BY phase, form ORDER BY phase DESC")
     assert forms == [("pre", order[0]), ("post", order[1])]
     test_ids = {r[0] for r in _query(db_path, "SELECT item_id FROM test_answers")}
@@ -126,7 +134,7 @@ def test_only_q_shows_agent_explanation(db_path) -> None:
 def test_stop_during_post_test(db_path) -> None:
     """«Завершити зараз» на вихідному тесті → відмова, вихідного балу немає."""
     at = _train(_run(_exam(_start(db_path), "pre", right=3).button(key="choose_q_agent").click()))
-    at = _run(at.button(key="to_post").click())
+    at = _to_post(at)
     at = _run(at.button(key="stop").click())
     assert at.session_state.step == "summary"
     assert _query(db_path, "SELECT pre_score, post_score, dropped FROM sessions") == [(3, None, 1)]
@@ -175,7 +183,7 @@ def test_teacher_pilot_table(db_path) -> None:
     at = _run(AppTest.from_file(TEACHER))
     table = at.dataframe[0].value
     assert list(table.columns) == [config.PILOT_ARM_NAMES_UA[a] for a in config.PILOT_ARMS]
-    assert table.loc["Вхідний тест, середнє з 6", "Q-агент"] == "3,00"
+    assert table.loc[f"Вхідний тест, середнє з {len(config.PILOT_TEST_SLOTS)}", "Q-агент"] == "3,00"
     assert table.loc["Хвилин на сесію", "Q-агент"] == "30"
     assert table.loc["Учнів", "Звичайний тест"] == "замало даних"
     text = _texts(at)
@@ -191,3 +199,25 @@ def test_logout_during_pre_test_closes_session(db_path) -> None:
     at = _run(at.sidebar.button(key="logout").click())
     assert at.session_state.step == "consent"
     assert _query(db_path, "SELECT dropped, ended_at IS NOT NULL FROM sessions") == [(1, 1)]
+
+
+def test_summary_reviews_both_tests(db_path) -> None:
+    """Етап 12: у підсумку — вкладки «Вхідний тест» і «Вихідний тест»; кожне завдання з ✓/✗, для помилок — розв'язок."""
+    at = _exam(_start(db_path), "pre", right=4)
+    at = _exam(_to_post(_train(_run(at.button(key="choose_cat").click()))), "post", right=7)
+    labels = [t.label for t in at.tabs]
+    assert labels == [f"Вхідний тест: 4 з {TOTAL}", f"Вихідний тест: 7 з {TOTAL}"]
+    text = _texts(at)
+    assert "Розбір тестів" in text and "Твоя відповідь правильна" in text and "Правильна:" in text
+    steps = [e.label for e in at.expander if e.label == "Розв'язок крок за кроком"]
+    assert len(steps) == 2 * TOTAL
+
+
+def test_review_after_stop_mid_pre_test(db_path) -> None:
+    """Учень завершив на 3-му завданні вхідного тесту → розбір лише вхідного тесту і лише 2 відповідей."""
+    at = _start(db_path)
+    for k in range(2):
+        _run(at.radio(key=f"exam_pre_{k}").set_value(at.session_state.test.current["answer"]))
+        at = _run(at.button(key="exam_btn").click())
+    at = _run(at.button(key="stop").click())
+    assert [t.label for t in at.tabs] == ["Вхідний тест: 2 з 2"]

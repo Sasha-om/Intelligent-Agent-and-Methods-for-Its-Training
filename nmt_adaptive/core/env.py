@@ -180,7 +180,7 @@ class AdaptiveEnv:
         parts = {"zpd": 0, "two_wrong": 0, "fatigue": 0, "dropout": 0, "gain": 0}
         return self.state(), 0.0, self.done, self._info(BREAK, None, parts)
 
-    def next_item(self, action: int) -> dict:
+    def next_item(self, action: int, subtopic: str | None = None) -> dict:
         """Обирає наступне завдання за дією (для застосунку — окремо від відповіді).
 
         Складність рахується ВІД ВИДИМОЇ оцінки: base = рівень «під учня» (p̂ ≈ 0,7) для обраної підтеми;
@@ -189,11 +189,9 @@ class AdaptiveEnv:
         """
         self._check_action(action)
         name = config.ACTIONS[action]
-        if name == "review_weak_topic":
-            subtopic = self._review_subtopic()
-        else:
-            subtopic = self.peek_subtopic()
-            self.pointer += 1
+        if subtopic is None:                # тему може задати ззовні обов'язкове охоплення тем (етап 12)
+            subtopic = self._review_subtopic() if name == "review_weak_topic" else self.peek_subtopic()
+            self.pointer += name != "review_weak_topic"
         self.level = self._level(subtopic, name)
         item = {"subtopic": subtopic, "difficulty": float(self.level)}
         if self.item_factory is not None:

@@ -65,13 +65,15 @@ def num(value: float | None, digits: int = 2, sign: bool = False) -> str:
     return f"{value:{'+' if sign else ''}.{digits}f}".replace(".", ",")
 
 
+TEST_N = len(config.PILOT_TEST_SLOTS)   # завдань у вхідному / вихідному тесті
+
 PILOT_ROWS = (   # рядки таблиці порівняння: (назва, як показати числа режиму)
     ("Сесій у таблиці", lambda a: str(a["chosen"])),
     ("Учнів", lambda a: str(a["students"])),
     ("Завершили вихідний тест", lambda a: str(a["finished"])),
-    ("Вхідний тест, середнє з 6", lambda a: num(a["pre"])),
+    (f"Вхідний тест, середнє з {TEST_N}", lambda a: num(a["pre"])),
     ("Вхідний тест — лише ті, хто завершив", lambda a: num(a["pre_done"])),
-    ("Вихідний тест, середнє з 6", lambda a: num(a["post"])),
+    (f"Вихідний тест, середнє з {TEST_N}", lambda a: num(a["post"])),
     ("Приріст, балів [95 % ДІ]", lambda a: f"{num(a['gain'], sign=True)} [{num(a['gain_low'], sign=True)}; "
                                            f"{num(a['gain_high'], sign=True)}]"),
     ("Нормалізована зміна (−1…1)", lambda a: num(a["norm_gain"], sign=True)),
@@ -80,7 +82,7 @@ PILOT_ROWS = (   # рядки таблиці порівняння: (назва, 
 )
 
 
-RESULT_ROWS = ("Вхідний тест — лише ті, хто завершив", "Вихідний тест, середнє з 6", "Приріст, балів [95 % ДІ]",
+RESULT_ROWS = ("Вхідний тест — лише ті, хто завершив", f"Вихідний тест, середнє з {TEST_N}", "Приріст, балів [95 % ДІ]",
                "Нормалізована зміна (−1…1)")
 
 

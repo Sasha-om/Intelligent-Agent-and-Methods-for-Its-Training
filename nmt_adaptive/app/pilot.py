@@ -1,6 +1,6 @@
 """Пілот-порівняння режимів (етап 10) без streamlit: тести А/Б, бали, план фіксованого тесту, статистика.
 
-Вхідний і вихідний тест — 6 завдань з тих самих слотів (core/pilot_design.py), форми А і Б різняться лише числами.
+Вхідний і вихідний тест — PILOT_TEST_SLOTS завдань (етап 12: 12) з тих самих слотів (core/pilot_design.py), форми А і Б різняться лише числами.
 Форми однакові для всіх учнів, тож бали можна порівнювати між режимами.
 """
 import json
@@ -21,7 +21,7 @@ def item_key(item: dict) -> tuple:
 
 
 def make_form(form: str, bank: list) -> list:
-    """Форма тесту ("A" або "B"): 6 завдань слотів exam_slots(); числа — з seed форми; не збігаються з банком."""
+    """Форма тесту ("A" або "B"): завдання слотів exam_slots(); числа — з seed форми; не збігаються з банком."""
     taken = {item_key(it) for it in bank}
     items = []
     for k, (subtopic, level) in enumerate(exam_slots(), 1):
@@ -65,7 +65,7 @@ class PilotTest:
     def __init__(self, phase: str, form: str, items: list, clock: Callable[[], float] = time.monotonic) -> None:
         """phase — "pre" або "post"; form — "A"/"B"; items — make_form(form, bank)."""
         self.phase, self.form, self.items = phase, form, items
-        self.results, self.stopwatch = [], Stopwatch(clock)
+        self.results, self.chosen, self.stopwatch = [], [], Stopwatch(clock)
         self.stopwatch.start()
 
     @property
@@ -85,11 +85,16 @@ class PilotTest:
             raise RuntimeError("Тест уже завершено.")
         correct = is_correct(item, chosen)
         self.results.append((item["subtopic"], int(item["difficulty"]), correct))
+        self.chosen.append(chosen)
         if not self.done:
             self.stopwatch.start()
         return {"phase": self.phase, "form": self.form, "slot": len(self.results), "item_id": item["id"],
                 "subtopic": item["subtopic"], "difficulty": item["difficulty"], "chosen": chosen,
                 "correct": correct, "time_sec": round(time_sec, 1)}
+
+    def review(self) -> list:
+        """Розбір тесту після завершення: [(завдання, обраний варіант, правильно?)] для відповідей, що вже є."""
+        return [(item, chosen, ok) for item, chosen, (_, _, ok) in zip(self.items, self.chosen, self.results)]
 
     @property
     def score(self) -> int:
