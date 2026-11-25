@@ -10,7 +10,7 @@ from app.session import ItemPicker, LiveSession
 from app.strategies import CATStrategy, FixedStrategy, QStrategy, make_strategy
 from core.agent import QAgent
 from core.items import is_correct, load_bank
-from core.pilot_design import fixed_slots, exam_slots
+from core.pilot_design import CoverageGuard, exam_slots, fixed_slots, exam_subtopics
 
 
 class FakeClock:
@@ -43,7 +43,7 @@ def test_forms_do_not_repeat_bank(bank) -> None:
     bank_keys = {pilot.item_key(it) for it in bank}
     tests = pilot.make_form("A", bank) + pilot.make_form("B", bank)
     assert not {pilot.item_key(it) for it in tests} & bank_keys
-    assert len({it["id"] for it in tests}) == 12
+    assert len({it["id"] for it in tests}) == 2 * len(config.PILOT_TEST_SLOTS)
 
 
 def test_fixed_plan_same_for_all(bank) -> None:
@@ -57,29 +57,51 @@ def test_fixed_plan_same_for_all(bank) -> None:
 
 
 def test_normalized_gain() -> None:
-    """Нормалізована зміна від −1 до 1: зріс — /(6 − вхід); упав — /вхід; 0→0 і 6→6 — None."""
-    assert pilot.normalized_gain(2, 4) == pytest.approx(0.5)
+    """Нормалізована зміна від −1 до 1: зріс — /(макс − вхід); упав — /вхід; 0→0 і макс→макс — None."""
+    assert pilot.normalized_gain(2, 4, total=6) == pytest.approx(0.5)
+    assert pilot.normalized_gain(2, 4) == pytest.approx(2 / (len(config.PILOT_TEST_SLOTS) - 2))
     assert pilot.normalized_gain(5, 0) == pytest.approx(-1)
     assert pilot.normalized_gain(3, 1) == pytest.approx(-2 / 3)
     assert pilot.normalized_gain(3, 3) == 0
-    assert pilot.normalized_gain(6, 6) is None and pilot.normalized_gain(0, 0) is None
+    top = len(config.PILOT_TEST_SLOTS)
+    assert pilot.normalized_gain(top, top) is None and pilot.normalized_gain(0, 0) is None
 
 
 def test_pilot_test_scores_and_times(bank) -> None:
-    """Тест: 6 завдань, бал = кількість правильних, час кожної відповіді окремо, після кінця — помилка."""
-    clock = FakeClock()
+    """Тест: усі слоти, бал = кількість правильних, час кожної відповіді окремо, після кінця — помилка."""
+    clock, n = FakeClock(), len(config.PILOT_TEST_SLOTS)
     test = pilot.PilotTest("pre", "A", pilot.make_form("A", bank), clock)
     records = []
-    for k in range(6):
+    for k in range(n):
         clock.now += 10 + k
         item = test.current
         chosen = item["answer"] if k % 2 == 0 else (item["answer"] + 1) % 4
         records.append(test.answer(chosen))
-    assert test.done and test.score == 3 and test.current is None
-    assert [r["time_sec"] for r in records] == [10, 11, 12, 13, 14, 15]
-    assert [r["slot"] for r in records] == [1, 2, 3, 4, 5, 6] and records[0]["correct"] is True
+    assert test.done and test.score == n // 2 and test.current is None
+    assert [r["time_sec"] for r in records] == [10 + k for k in range(n)]
+    assert [r["slot"] for r in records] == list(range(1, n + 1)) and records[0]["correct"] is True
     with pytest.raises(RuntimeError):
         test.answer(0)
+
+
+def test_pilot_test_review(bank) -> None:
+    """Розбір тесту: для кожної відповіді — завдання, обраний варіант, правильно чи ні; до кінця — лише відповідені."""
+    test = pilot.PilotTest("post", "B", pilot.make_form("B", bank), FakeClock())
+    first, second = test.current, test.items[1]
+    test.answer(first["answer"])
+    test.answer((second["answer"] + 1) % 4)
+    review = test.review()
+    assert [(it["id"], ok) for it, _, ok in review] == [(first["id"], True), (second["id"], False)]
+    assert review[1][1] == (second["answer"] + 1) % 4
+
+
+def test_easier_slots_first() -> None:
+    """Тест етапу 12: 6 тем × 2 рівні, спершу всі легші, теми ті самі в обох половинах."""
+    slots = list(config.PILOT_TEST_SLOTS)
+    half = len(slots) // 2
+    assert len(slots) == 12 and len(set(slots)) == 12
+    assert all(lvl < 0 for _, lvl in slots[:half]) and all(lvl > 0 for _, lvl in slots[half:])
+    assert [s for s, _ in slots[:half]] == [s for s, _ in slots[half:]]
 
 
 def test_item_picker_excludes_tests(bank) -> None:
@@ -91,12 +113,63 @@ def test_item_picker_excludes_tests(bank) -> None:
     assert not {pilot.item_key(it) for it in got} & keys
 
 
-def _session(arm: str, bank: list, seed: int = 0) -> LiveSession:
-    """Навчальна сесія пілоту в режимі arm з «вхідним тестом» (2 правильні з 6)."""
+def _session(arm: str, bank: list, seed: int = 0, right: int = 2, cover: bool = True) -> LiveSession:
+    """Навчальна сесія пілоту в режимі arm з «вхідним тестом» (перші right правильні) і охопленням тем тесту."""
     tests = pilot.make_form("A", bank) + pilot.make_form("B", bank)
-    warm = [(s, lvl, k < 2) for k, (s, lvl) in enumerate(exam_slots())]
+    warm = [(s, lvl, k < right) for k, (s, lvl) in enumerate(exam_slots())]
     return LiveSession(make_strategy(arm, bank, tests), bank, {}, seed, clock=FakeClock(),
-                       session_items=config.PILOT_TRAIN_ITEMS, warm=warm, exclude=tests)
+                       session_items=config.PILOT_TRAIN_ITEMS, warm=warm, exclude=tests,
+                       must_cover=exam_subtopics() if cover else None)
+
+
+def _run_session(session: LiveSession, rng: random.Random) -> list:
+    """Проходить сесію (перерви — пропускає); повертає рішення для кожного завдання."""
+    decisions = []
+    while not session.done:
+        decision = session.decide()
+        if decision["action"] == "short_break":
+            session.take_break(None)
+            continue
+        decisions.append((decision["action"], session.item["subtopic"]))
+        session.answer(rng.randrange(4))
+    return decisions
+
+
+def test_coverage_guard_forces_only_at_the_end() -> None:
+    """Тема примусова лише тоді, коли пропущених тем стільки ж, скільки лишилося завдань."""
+    guard = CoverageGuard(["a", "b"])
+    assert guard.forced(0, 14) is None and guard.forced(11, 14) is None
+    assert guard.forced(12, 14) == "a"
+    guard.seen("a")
+    assert guard.forced(12, 14) is None and guard.forced(13, 14) == "b"
+    guard.seen("b")
+    assert guard.forced(13, 14) is None and exam_subtopics() == list(dict.fromkeys(s for s, _ in exam_slots()))
+
+
+@pytest.mark.parametrize("arm", config.PILOT_ARMS)
+def test_every_arm_covers_tested_topics(arm, bank) -> None:
+    """Етап 12: у кожному режимі кожна тема вихідного тесту трапляється в тренуванні (різні учні, різні вхідні бали)."""
+    for seed in range(12):
+        decisions = _run_session(_session(arm, bank, seed, right=seed % 13), random.Random(seed))
+        assert len(decisions) == config.PILOT_TRAIN_ITEMS
+        assert set(exam_subtopics()) <= {subtopic for _, subtopic in decisions}
+
+
+def test_forced_topic_is_explained(bank) -> None:
+    """Примусова тема має дію «coverage» і пояснення, однакове для всіх режимів; без охоплення — її може не бути."""
+    forced, rng = [], random.Random(0)
+    for seed in range(20):
+        session = _session("q_agent", bank, seed, right=6)
+        while not session.done:
+            decision = session.decide()
+            if decision["action"] == "short_break":
+                session.take_break(None)
+                continue
+            if decision["action"] == "coverage":
+                forced.append(decision)
+            session.answer(session.item["answer"] if rng.random() < 0.6 else (session.item["answer"] + 1) % 4)
+    assert forced, "за 20 сесій охоплення мало хоч раз спрацювати"
+    assert all("однакове для всіх режимів" in d["reason"] and d["state_view"] is None for d in forced)
 
 
 @pytest.mark.parametrize("arm", config.PILOT_ARMS)

@@ -14,6 +14,7 @@ import config
 from core.agent import QAgent
 from app.explain import headline, plain_headline, state_view, why_text
 from core.env import BREAK, AdaptiveEnv
+from core.pilot_design import CoverageGuard
 from core.items import is_correct, make_item, solve
 from core.walkthrough import walkthrough
 
@@ -108,11 +109,12 @@ class LiveSession:
 
     def __init__(self, strategy: object, bank: list, checkin: dict | None, seed: int,
                  clock: Callable[[], float] = time.monotonic, session_items: int | None = None,
-                 warm: list | None = None, exclude: list = ()) -> None:
+                 warm: list | None = None, exclude: list = (), must_cover: list | None = None) -> None:
         """strategy — режим (app/strategies.py) або заморожений QAgent; seed — випадковість середовища.
 
         session_items — довжина сесії (у пілоті 14); warm — відповіді вхідного тесту для стартової θ̂;
-        exclude — завдання тестів, які не можна повторювати в тренуванні.
+        exclude — завдання тестів, які не можна повторювати в тренуванні;
+        must_cover — теми, які мають хоч раз трапитися в тренуванні (теми вихідного тесту), або None.
         """
         if isinstance(strategy, QAgent):
             from app.strategies import QStrategy     # тут, щоб не було циклічного імпорту
@@ -124,6 +126,7 @@ class LiveSession:
         if warm:
             self.state = self.env.warm_start(warm)
         strategy.start(self.env)
+        self.guard = CoverageGuard(must_cover) if must_cover is not None else None
         self.item, self.decision, self.results, self.break_fallbacks = None, None, [], 0
 
     @property
@@ -138,10 +141,15 @@ class LiveSession:
         Пояснення «чому» і «що бачив агент» — лише в Q-агента (strategy.explain); в інших — тема і складність.
         """
         state, counts = self.state, self.topic_counts()
+        forced = self.guard.forced(self.env.items_done, self.env.session_items) if self.guard else None
+        if forced is not None:
+            return self._decide_forced(forced, state)
         action, self.item, fallback = self.strategy.next(self.env, state)
         name = config.ACTIONS[action]
         if self.item is not None:
             self.stopwatch.start()
+            if self.guard:
+                self.guard.seen(self.item["subtopic"])
         self.decision = {"action": name if self.strategy.name != "fixed" else "fixed", "state": state,
                          "fallback": fallback, "after_items": self.env.items_done}
         if self.strategy.explain:
@@ -149,6 +157,17 @@ class LiveSession:
                                  reason=why_text(name, self.env, self.item, counts, fallback))
         else:
             self.decision.update(text=plain_headline(self.item), reason="", state_view=None)
+        return self.decision
+
+    def _decide_forced(self, subtopic: str, state: int) -> dict:
+        """Обов'язкове охоплення: тема з вихідного тесту, якої ще не було; рівень — «той самий» (під учня)."""
+        self.item = self.env.next_item(config.ACTIONS.index("same"), subtopic=subtopic)
+        self.guard.seen(subtopic)
+        self.stopwatch.start()
+        self.decision = {"action": "coverage", "state": state, "fallback": False, "after_items": self.env.items_done,
+                         "text": plain_headline(self.item), "state_view": None,
+                         "reason": f"Теми «{self.item['subtopic_name']}» ще не було, а вона є у вихідному тесті — "
+                                   "тому даємо її зараз (це правило однакове для всіх режимів)."}
         return self.decision
 
     def topic_counts(self) -> dict:

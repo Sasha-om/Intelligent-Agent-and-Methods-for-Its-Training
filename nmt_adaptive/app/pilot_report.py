@@ -5,7 +5,8 @@
     python -m app.pilot_report --db пк1.sqlite пк2.sqlite        # кілька баз (кожен ПК окремо) — разом
 
 Файли: пілот_режими, пілот_порівняння, пілот_сам_із_собою, пілот_вибір, пілот_форми,
-пілот_складність_банку, пілот_проти_симуляції (CSV) + пілот_вхід_вихід.png, пілот_складність_банку.png.
+пілот_складність_банку, пілот_проти_симуляції, пілот_крива_навчання, пілот_швидкість_навчання (CSV)
++ пілот_вхід_вихід.png, пілот_складність_банку.png, пілот_крива_навчання.png.
 У звіт потрапляють лише агреговані числа — без кодів учнів.
 """
 import argparse
@@ -19,6 +20,7 @@ import pandas as pd
 
 import config
 from app import pilot_storage
+from core import learning_curve as lc
 from sim.legacy import write_csv
 
 matplotlib.use("Agg")
@@ -143,6 +145,67 @@ def difficulty_table(data: dict) -> list:
     return out
 
 
+def curve_sessions(data: dict, rows: list) -> dict:
+    """Точки кривої навчання по режимах: {режим: [точки сесії]} (сесії rows; θ̂ — з вхідного тесту сесії)."""
+    tests = data["tests"][data["tests"]["phase"] == "pre"].sort_values("id")
+    answers = data["answers"].sort_values(["n", "id"])
+    pre, train = ({key: list(zip(g["subtopic"], g["difficulty"], g["correct"]))
+                   for key, g in frame.groupby(["db", "session_id"])} for frame in (tests, answers))
+    out = {arm: [] for arm in ARMS}
+    for r in rows:
+        if r["id"] in train and r["arm"] in out:
+            out[r["arm"]].append(lc.session_points(train[r["id"]], lc.pre_estimator(pre.get(r["id"], []))))
+    return out
+
+
+def curve_table(sessions: dict) -> list:
+    """Крива навчання: режим × спроба → правильно, очікувано, залишок (лише спроби з ≥ CURVE_MIN_ANSWERS відповідей)."""
+    out = []
+    for arm, points in sessions.items():
+        for row in lc.curve_rows(points):
+            if row["відповідей"] >= config.CURVE_MIN_ANSWERS:
+                out.append({"режим": ARMS[arm], **row})
+    return out
+
+
+def rate_table(sessions: dict, rng: np.random.Generator) -> list:
+    """Швидкість навчання кожного режиму (п. п. за спробу, ДІ 97,5 %) і різниця «Q − інший»."""
+    out = []
+    for arm, points in sessions.items():
+        value, low, high = lc.slope_ci(points, rng)
+        out.append({"режим": ARMS[arm], "сесій": len(points), "швидкість_пп_за_спробу": _pp(value),
+                    "ДІ_низ": _pp(low), "ДІ_верх": _pp(high)})
+    for other in config.PILOT_ARMS[1:]:
+        value, low, high = lc.slope_difference(sessions["q_agent"], sessions[other], rng)
+        out.append({"режим": f"Q-агент − {ARMS[other]}", "сесій": len(sessions["q_agent"]) + len(sessions[other]),
+                    "швидкість_пп_за_спробу": _pp(value), "ДІ_низ": _pp(low), "ДІ_верх": _pp(high),
+                    "значущо": None if low is None else bool(low > 0 or high < 0)})
+    return out
+
+
+def _pp(value: float | None) -> float | None:
+    """Частка → відсоткові пункти."""
+    return None if value is None else 100 * value
+
+
+def chart_curve(rows: list, path: Path) -> None:
+    """Крива навчання: залишок «правильно − очікувано» (п. п.) від номера спроби, лінія на режим."""
+    fig, ax = plt.subplots(figsize=(6.5, 4.2))
+    for name in dict.fromkeys(r["режим"] for r in rows):
+        mine = [r for r in rows if r["режим"] == name]
+        ax.plot([r["спроба"] for r in mine], [100 * r["залишок"] for r in mine], marker="o", label=name)
+    ax.axhline(0, color="grey", linewidth=1, linestyle="--")
+    cap = config.CURVE_MAX_OPPORTUNITY
+    ax.set_xticks(range(1, cap + 1), [str(k) for k in range(1, cap)] + [f"{cap}+"])
+    ax.set_xlabel("котра спроба з цієї теми в тренуванні")
+    ax.set_ylabel("правильно − очікувано за вхідним тестом, п. п.")
+    ax.set_title("Пілот: крива навчання (вище нуля — учень знає більше, ніж на вході)")
+    ax.legend(fontsize=8)
+    fig.tight_layout()
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+
+
 def vs_simulation(arms: list) -> list:
     """Реальні учні проти віртуальних (results/симуляція_пілоту_режими.csv): вхід, вихід, приріст, відмови."""
     if not SIM_FILE.exists():
@@ -172,7 +235,7 @@ def chart_pre_post(arms: list, path: Path) -> None:
                     xytext=(6, 0), fontsize=8)
     ax.set_xticks([0, 1], ["вхідний тест", "вихідний тест"])
     ax.set_ylim(0, len(config.PILOT_TEST_SLOTS))
-    ax.set_ylabel("правильних із 6 (середнє)")
+    ax.set_ylabel(f"правильних із {len(config.PILOT_TEST_SLOTS)} (середнє)")
     ax.set_title("Пілот: вхідний → вихідний тест (учні, що завершили)")
     ax.legend(fontsize=8)
     fig.tight_layout()
@@ -210,12 +273,17 @@ def build(paths: list, out: Path, seed: int = 0) -> dict:
               "пілот_сам_із_собою": within_table(rows), "пілот_вибір": choice_table(rows),
               "пілот_форми": forms_table(data), "пілот_складність_банку": difficulty_table(data)}
     tables["пілот_проти_симуляції"] = vs_simulation(tables["пілот_режими"])
+    curves = curve_sessions(data, first)
+    tables["пілот_крива_навчання"] = curve_table(curves)
+    tables["пілот_швидкість_навчання"] = rate_table(curves, rng)
     out.mkdir(parents=True, exist_ok=True)
     for name, table in tables.items():
         save(out, name, table)
     chart_pre_post(tables["пілот_режими"], out / "пілот_вхід_вихід.png")
     if tables["пілот_складність_банку"]:
         chart_difficulty(tables["пілот_складність_банку"], out / "пілот_складність_банку.png")
+    if tables["пілот_крива_навчання"]:
+        chart_curve(tables["пілот_крива_навчання"], out / "пілот_крива_навчання.png")
     return tables
 
 
@@ -235,6 +303,10 @@ def main(argv: list | None = None) -> None:
     for row in tables["пілот_режими"]:
         print(f"{row['режим']:<24} обрали {row.get('chosen', 0):>3}  вхід {row.get('pre') or 0:.2f}  "
               f"вихід {row.get('post') or 0:.2f}  приріст {row.get('gain') or 0:+.2f}")
+    for row in tables["пілот_швидкість_навчання"]:
+        value = row["швидкість_пп_за_спробу"]
+        ci = "" if row["ДІ_низ"] is None else f" [{row['ДІ_низ']:+.1f}; {row['ДІ_верх']:+.1f}]"
+        print(f"Швидкість навчання, {row['режим']:<28} {'—' if value is None else f'{value:+.1f} п. п./спробу'}{ci}")
     print(f"Готово → {args.out} (ця папка не йде в git)")
 
 
