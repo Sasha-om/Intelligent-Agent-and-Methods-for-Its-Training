@@ -144,6 +144,43 @@ def show_class_status() -> None:
         st.rerun()
 
 
+def show_training() -> None:
+    """Тренування: загальна картина класу (або «замало даних»)."""
+    with closing(storage.connect()) as conn:
+        agg = storage.class_aggregates(conn)
+    if not agg:
+        st.info(f"Замало даних: результати з'являться, коли тест завершать щонайменше "
+                f"{config.MIN_GROUP_FOR_STATS} учні. {FINISHED_NOTE}")
+        return
+    st.caption(FINISHED_NOTE)
+    show_numbers(agg)
+    show_topics(agg)
+
+
+def annul() -> None:
+    """Дія кнопки «Анулювати»: архівна копія + очищення бази; галочки знімаються (щоб не натиснути вдруге)."""
+    with closing(storage.connect()) as conn:
+        archive = storage.annul_all(conn)
+    st.session_state.update(annulled=str(archive) if archive else "", annul_sure=False, annul_busy=False)
+
+
+def show_annul() -> None:
+    """«Анулювати результати»: копія бази — в архів, таблиця вчителя починається з нуля (перед справжнім уроком)."""
+    with st.expander("⚠️ Анулювати результати"):
+        st.write("Усі сесії, тести й коди учнів зникнуть зі сторінки вчителя, і нові уроки рахуватимуться з нуля. "
+                 "Копія бази збережеться в папці `data/students/archive/` на цьому комп'ютері (не в git) — "
+                 "її можна відкрити звітом `python -m app.pilot_report --db <файл>`.")
+        with closing(storage.connect()) as conn:
+            active = storage.in_progress_today(conn)
+        sure = st.checkbox("Так, анулювати всі результати", key="annul_sure")
+        busy = active > 0 and not st.checkbox(f"Зараз проходять тест: {active}. Їхні сесії теж будуть анульовані — "
+                                              "я знаю, що учні вже закінчили", key="annul_busy")
+        st.button("Анулювати", key="annul_btn", type="primary", disabled=not sure or busy, on_click=annul)
+    if "annulled" in st.session_state:
+        done = st.session_state.pop("annulled")
+        st.success(f"Результати анульовано. Копія: {done}" if done else "База вже порожня — анулювати нічого.")
+
+
 def main() -> None:
     """Точка входу сторінки вчителя."""
     st.set_page_config(page_title="НМТ: вчитель", page_icon="📊")
@@ -154,15 +191,9 @@ def main() -> None:
         show_pilot()
         st.divider()
         st.subheader("Тренування: загальна картина")
-    with closing(storage.connect()) as conn:
-        agg = storage.class_aggregates(conn)
-    if not agg:
-        st.info(f"Замало даних: результати з'являться, коли тест завершать щонайменше "
-                f"{config.MIN_GROUP_FOR_STATS} учні. {FINISHED_NOTE}")
-        return
-    st.caption(FINISHED_NOTE)
-    show_numbers(agg)
-    show_topics(agg)
+    show_training()
+    st.divider()
+    show_annul()
 
 
 main()
